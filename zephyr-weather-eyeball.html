@@ -1,9 +1,16 @@
 <!DOCTYPE html>
 <!--
   ZEPHYR CHASERS — WEATHER EYEBALL
-  Build: ZEPHYR-EYEBALL-2026.06.01-b345
-  Shipped (UTC): 2026-10-25T15:51:24Z
+  Build: ZEPHYR-EYEBALL-2026.06.01-b346
+  Shipped (UTC): 2026-10-25T15:53:19Z
   Single-file multi-aircraft go/no-go trendliner.
+  b346: Drift consolidation (Option A). "Drift & winds" and "Drift map" are one section: flight parameters and
+  live GPS at the top, then a 3D / Map / Plan 2D view toggle (setTrackMode). Map = the former drift-map body moved
+  in verbatim (#dmViewWrap; every id kept, so pinch/arcs/cone/POI/soft-ground code is unchanged); it loads on first
+  switch. The 3D view now lays the Esri topo tiles under the track as a ground plane: proj() is a parallel
+  projection, so the Web-Mercator mosaic is placed with one SVG matrix() (zoom chosen so tile px ~ screen px, max 36
+  tiles), clipped to the SFC ring, and it rotates with the Rotate slider. The fronts cube stays in the section.
+  "driftmap" removed from DEFAULT_ORDER; drift tile is full-width.
   b345: US state borders drawn under the isobars on the pressure-bubble plan view (US_STATE_LINES: us-atlas states-10m,
   simplified, CONUS window, ~32 KB; equirectangular about the site, clipped to the field circle). Visible on the
   synoptic / regional tiers; the 90 nm local view rarely crosses a border.
@@ -2306,7 +2313,7 @@
 </div>
 
 <div class="panel coll" data-sect="drift" data-air="collapsed">
-  <h2>Drift &amp; winds</h2>
+  <h2>Drift — 3D · map · plan · fronts cube</h2>
   <div class="sect-sum" id="sum-drift"></div>
   <div class="balloon-only">
   <div class="row">
@@ -2318,72 +2325,13 @@
     <div><label>Mid time (min)</label><input id="fpTMid" value="20" style="width:80px"></div>
     <div><label>Total flight (min)</label><input id="fpTotal" value="90" style="width:90px"></div>
   </div>
-  <div id="fpTrack" style="margin-top:10px"></div>
-  <div class="row" style="margin-top:6px;align-items:center;gap:10px">
-    <button type="button" id="fpPlan">Plan 2D</button><button type="button" id="fpThree" class="primary">3D</button>
+  <div class="row" style="margin-top:8px;align-items:center;gap:10px">
+    <button type="button" id="fpThree" class="primary">3D</button><button type="button" id="fpMap">Map</button><button type="button" id="fpPlan">Plan 2D</button>
     <label style="margin:0;white-space:nowrap">Rotate <span id="fpAz" class="tiny">0°</span></label>
     <input id="fpRot" type="range" min="0" max="360" value="0" step="2" style="flex:1">
   </div>
-  <div class="row" style="margin-top:6px;align-items:center;gap:10px">
-    <button type="button" id="liveStart">Start live track</button>
-    <button type="button" id="liveClear">Clear</button>
-    <label style="margin:0;display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="fpEvolve" style="width:auto;margin:0"> Time-evolve winds</label>
-    <span id="liveStatus" class="tiny"></span>
-  </div>
-  <div id="fpStats" class="tiny" style="margin-top:6px"></div>
-  <div class="tiny" style="margin-top:4px">Integrates the profile winds along your vertical schedule (1-min steps): climb → hold ceiling → step down through the mid band → ride near surface to the end. N-up, launch at the cross, rings in NM, colour = altitude. Estimate only — real drift varies with the actual column and with timing through the evening.</div>
-  </div>
-  <div style="border-top:1px solid var(--edge);margin:14px 0 8px"></div>
-  <div style="font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.03em;margin:0 0 6px">3D cube — local wind &amp; synoptic fronts</div>
-  <div class="row" style="gap:6px;margin:0 0 8px"><button type="button" id="cubeModeLocal" class="primary">Local wind</button><button type="button" id="cubeModeSyn">Synoptic fronts</button><button type="button" id="cubeView" style="margin-left:auto">Top-down</button></div>
-  <div id="cubeLocalCtrl">
-  <div class="row" style="align-items:center;gap:10px"><button type="button" id="cubeBtn" class="primary">Load 3D cube</button> <label style="margin:0;display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="cubeFollow" style="width:auto;margin:0"> Follow flight path</label> <label style="margin:0;display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="cubeOmega" style="width:auto;margin:0"> Vertical motion</label> <span id="cubeOmStatus" class="tiny muted"></span> <span id="cubeStatus" class="tiny muted">Rotatable model wind volume around your site at the target time. Separate fetch (5×5 grid × 7 levels). Top alt, arrow density &amp; size adjust below — redraw only, no re-fetch.</span></div>
-  </div>
-  <div id="cubeSynCtrl" style="display:none">
-  <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap">
-    <button type="button" id="fcBtn" class="primary">Load front cube</button>
-    <span id="fcStatus" class="tiny muted">Reuses the synoptic surface grid (loads it if needed). Red = warm air advecting in, blue = cold — the two masses meet at the front.</span>
-  </div>
-  <div style="margin-top:8px">
-    <label style="margin:0 0 6px;display:flex;align-items:center;gap:8px"><span style="white-space:nowrap;min-width:96px">Bias <span style="color:#5b9dff">cold</span>↔<span style="color:#ff6b6b">warm</span></span><input id="fcBias" type="range" min="-100" max="100" value="0" step="1" style="flex:1"></label>
-    <label style="margin:0;display:flex;align-items:center;gap:8px"><span style="white-space:nowrap;min-width:96px">Extent</span><input id="fcZoom" type="range" min="0" max="100" value="100" step="1" style="flex:1"></label>
-  </div>
-  <div class="row" style="margin-top:8px;align-items:center;gap:10px"><label style="margin:0;white-space:nowrap;display:flex;align-items:center;gap:6px">Footprint <select id="fsGrid" style="padding:4px 7px"><option value="5">5×5 · 5lv</option><option value="7">7×7 · 5lv</option><option value="9" selected>9×9 · 7lv</option></select></label> <button type="button" id="fsBtn">Load stack (beta)</button><span id="fsStatus" class="tiny muted">Multi-level Soft voxel stack — pick a footprint, then Load. 24 h window at 3 h steps. Throttled.</span></div>
-  <div class="row" id="fsAnim" style="margin-top:6px;align-items:center;gap:8px;display:none"><button type="button" id="fsPrev">Prev</button><button type="button" id="fsPlay">Play</button><button type="button" id="fsNext">Next</button><span id="fsFrame" class="tiny muted"></span></div>
-  </div>
-  <div style="position:relative;max-width:720px">
-  <canvas id="cubeCanvas" width="720" height="460" style="width:100%;max-width:720px;touch-action:none;cursor:grab;margin-top:8px;display:block"></canvas>
-  <div id="cubeAltSel" style="position:absolute;top:12px;right:3px;display:flex;flex-direction:column;gap:3px;align-items:stretch;z-index:2"></div>
-  </div>
-  <div id="fcCube" style="margin-top:10px;touch-action:none;user-select:none;cursor:grab;display:none"><div class="muted">Load to build the cube. It reuses the synoptic grid (~990 mi), tilts the warm/cold-advection field into a translucent volume, and lets you bias the view toward one air mass.</div></div>
-  <div id="cubeLocalCtrl2">
-  <div class="row" style="margin-top:6px;align-items:center;gap:10px"><label style="margin:0;white-space:nowrap">Zoom <span id="cubeZoomVal" class="tiny">1.0&times;</span></label><input id="cubeZoom" type="range" min="0" max="100" value="0" step="1" style="flex:1"></div>
-  <div class="row" style="margin-top:6px;align-items:center;gap:8px;flex-wrap:wrap">
-    <label style="margin:0;white-space:nowrap">Arrows <select id="cubeDensity" style="padding:4px 7px"><option value="dense" selected>Dense</option><option value="normal">Normal</option><option value="sparse">Sparse</option></select></label>
-    <label style="margin:0;white-space:nowrap;flex:1;min-width:130px;display:flex;align-items:center;gap:6px">Size <input id="cubeSize" type="range" min="60" max="180" value="120" step="5" style="flex:1"></label>
-  </div>
-  <div class="row" style="margin-top:6px;align-items:center;gap:8px;flex-wrap:wrap"><label style="margin:0;display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="cubePulse" style="width:auto;margin:0"> Pulse arrows</label><label style="margin:0;white-space:nowrap;flex:1;min-width:150px;display:flex;align-items:center;gap:6px">Pulse spd <input id="cubePulseSpd" type="range" min="25" max="300" value="100" step="5" style="flex:1"></label></div>
-  </div>
-  <div id="cubeLocalCap">
-  <div class="cfi"><ul>
-    <li>Each arrow is the <b>model wind</b> at a grid point and altitude, pointing the way the air <b>drifts</b>; color runs low → high (surface → ~18,000 ft). A <b>single-site volume</b> centred on your Airport/GPS point — <b>not</b> the flight path (that's the drift track above). <b>N/E/S/W</b> label the floor; <b>heights</b> label the axis. Tick <b>Follow flight path</b> to size the box to your projected drift and thread the <b style="color:#ff2df0">magenta track</b> through it (white dot = launch, amber = end); the <b>zoom</b> slider scales the whole volume uniformly &mdash; the path widens and climbs together, not just vertically. <b>Drag to rotate.</b></li>
-    <li><b>In flight:</b> arrows that fan out or twist with height (veer / backing) = <b>shear</b> — expect a bumpier ride and your drift direction shifting as you climb; tightly aligned arrows = a smooth, predictable column. Colour = altitude (surface → ~18,000 ft), so you can spot the level where the wind changes. Horizontal footprint is ~±25 NM — your actual local field.</li>
-    <li>Vertical axis uses standard-atmosphere heights for the pressure levels (10 m, 925, 850, 700, 500 hPa); horizontal spread is ~±25 NM around your site.</li>
-    <li>A target-time snapshot and a model-derived proxy — it shows structure (veer, shear, convergence), not a substitute for a sounding. Time animation is queued.</li>
-  </ul></div>
-  </div>
-  <div id="cubeSynCap" style="display:none">
-  <ul class="cap">
-    <li><b style="color:#ff6b6b">Red</b> columns = <b>warm advection</b> (warm air moving in, ahead of a warm front); <b style="color:#5b9dff">blue</b> = <b>cold advection</b> (behind a cold front). Column height &amp; opacity track advection strength — the back axis reads it in <b>°C/h</b>, and the floor label gives the column footprint &amp; total span. Drag the cube to rotate.</li>
-    <li><b>In flight:</b> a tall <b style="color:#ff6b6b">red</b> column = warm air arriving there — destabilizing, usually ahead of a warm front (building cloud, rising wind); a tall <b style="color:#5b9dff">blue</b> column = cold air arriving — post-frontal gusts, drying, clearing but bumpy. Read the masses against your launch at centre to see what’s moving toward you. Each column covers ~100 NM of ground; the whole field spans ~860 NM, so this is the big picture, not your local field.</li>
-    <li><b>Bias</b> fades one mass so you can see the other through it; <b>Extent</b> zooms from a tight local view out to the full ~990 mi grid.</li>
-    <li>Surface-only for now (one tilted layer); a true multi-level vertical stack is the planned upgrade. Model-derived proxy, valid ~now.</li>
-  </ul>
-  </div>
-</div>
-
-<div class="panel coll balloon-only" data-sect="driftmap" data-def="collapsed">
-    <h2>Drift map<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--faint);border:1px solid var(--faint);border-radius:5px;padding:1px 6px;margin:0 4px 0 12px;display:inline-block;white-space:nowrap;vertical-align:middle;opacity:.85">BALLOON</span></h2>
+  <div id="fpTrack" style="margin-top:10px"></div>
+  <div id="dmViewWrap" style="display:none;margin-top:6px">
     <div class="row" style="align-items:center;gap:10px;margin:4px 0 6px;flex-wrap:wrap">
       <button type="button" id="dmLoad" class="primary">Load / refresh map</button> <button type="button" id="dmHere" disabled>⌖ Launch here</button> <button type="button" id="dmReset">Reset to airport</button> <button type="button" id="dmZoomOut">− Zoom out</button> <button type="button" id="dmZoomIn">+ Zoom in</button> <button type="button" id="dmGround">Check ground</button> <label class="tiny" style="white-space:nowrap"><input type="checkbox" id="dmRings" checked> NM arcs</label>
       <span id="dmStatus" class="tiny muted">Fetch winds aloft, then load the drift map.</span>
@@ -2466,6 +2414,63 @@
   <div class="sect-sum" id="sum-metrics"></div>
   <div id="metrics" class="cards"><div class="muted">Fetch winds aloft to compute gust factor, cloud base, steerability &amp; pressure trend.</div></div>
   <div class="tiny" style="margin-top:8px">Adapted from soaring / paraglider / ballooning practice: <b>gust factor</b> (PG roughness), <b>cloud base (LCL)</b> (soaring Cu base / fog tell), <span class="balloon-only"><b>steerability</b> (surface-vs-3k direction split — the Albuquerque “box”)</span><span class="air-only"><b>wind veer</b> (surface-vs-3k direction change with height)</span>, and <b>3-h pressure tendency</b> (frontal/gust precursor). All derived from data already on hand.</div>
+  </div>
+  <div class="row" style="margin-top:6px;align-items:center;gap:10px">
+    <button type="button" id="liveStart">Start live track</button>
+    <button type="button" id="liveClear">Clear</button>
+    <label style="margin:0;display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="fpEvolve" style="width:auto;margin:0"> Time-evolve winds</label>
+    <span id="liveStatus" class="tiny"></span>
+  </div>
+  <div id="fpStats" class="tiny" style="margin-top:6px"></div>
+  <div class="tiny" style="margin-top:4px">Integrates the profile winds along your vertical schedule (1-min steps): climb → hold ceiling → step down through the mid band → ride near surface to the end. N-up, launch at the cross, rings in NM, colour = altitude. Estimate only — real drift varies with the actual column and with timing through the evening.</div>
+  </div>
+  <div style="border-top:1px solid var(--edge);margin:14px 0 8px"></div>
+  <div style="font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.03em;margin:0 0 6px">3D cube — local wind &amp; synoptic fronts</div>
+  <div class="row" style="gap:6px;margin:0 0 8px"><button type="button" id="cubeModeLocal" class="primary">Local wind</button><button type="button" id="cubeModeSyn">Synoptic fronts</button><button type="button" id="cubeView" style="margin-left:auto">Top-down</button></div>
+  <div id="cubeLocalCtrl">
+  <div class="row" style="align-items:center;gap:10px"><button type="button" id="cubeBtn" class="primary">Load 3D cube</button> <label style="margin:0;display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="cubeFollow" style="width:auto;margin:0"> Follow flight path</label> <label style="margin:0;display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="cubeOmega" style="width:auto;margin:0"> Vertical motion</label> <span id="cubeOmStatus" class="tiny muted"></span> <span id="cubeStatus" class="tiny muted">Rotatable model wind volume around your site at the target time. Separate fetch (5×5 grid × 7 levels). Top alt, arrow density &amp; size adjust below — redraw only, no re-fetch.</span></div>
+  </div>
+  <div id="cubeSynCtrl" style="display:none">
+  <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap">
+    <button type="button" id="fcBtn" class="primary">Load front cube</button>
+    <span id="fcStatus" class="tiny muted">Reuses the synoptic surface grid (loads it if needed). Red = warm air advecting in, blue = cold — the two masses meet at the front.</span>
+  </div>
+  <div style="margin-top:8px">
+    <label style="margin:0 0 6px;display:flex;align-items:center;gap:8px"><span style="white-space:nowrap;min-width:96px">Bias <span style="color:#5b9dff">cold</span>↔<span style="color:#ff6b6b">warm</span></span><input id="fcBias" type="range" min="-100" max="100" value="0" step="1" style="flex:1"></label>
+    <label style="margin:0;display:flex;align-items:center;gap:8px"><span style="white-space:nowrap;min-width:96px">Extent</span><input id="fcZoom" type="range" min="0" max="100" value="100" step="1" style="flex:1"></label>
+  </div>
+  <div class="row" style="margin-top:8px;align-items:center;gap:10px"><label style="margin:0;white-space:nowrap;display:flex;align-items:center;gap:6px">Footprint <select id="fsGrid" style="padding:4px 7px"><option value="5">5×5 · 5lv</option><option value="7">7×7 · 5lv</option><option value="9" selected>9×9 · 7lv</option></select></label> <button type="button" id="fsBtn">Load stack (beta)</button><span id="fsStatus" class="tiny muted">Multi-level Soft voxel stack — pick a footprint, then Load. 24 h window at 3 h steps. Throttled.</span></div>
+  <div class="row" id="fsAnim" style="margin-top:6px;align-items:center;gap:8px;display:none"><button type="button" id="fsPrev">Prev</button><button type="button" id="fsPlay">Play</button><button type="button" id="fsNext">Next</button><span id="fsFrame" class="tiny muted"></span></div>
+  </div>
+  <div style="position:relative;max-width:720px">
+  <canvas id="cubeCanvas" width="720" height="460" style="width:100%;max-width:720px;touch-action:none;cursor:grab;margin-top:8px;display:block"></canvas>
+  <div id="cubeAltSel" style="position:absolute;top:12px;right:3px;display:flex;flex-direction:column;gap:3px;align-items:stretch;z-index:2"></div>
+  </div>
+  <div id="fcCube" style="margin-top:10px;touch-action:none;user-select:none;cursor:grab;display:none"><div class="muted">Load to build the cube. It reuses the synoptic grid (~990 mi), tilts the warm/cold-advection field into a translucent volume, and lets you bias the view toward one air mass.</div></div>
+  <div id="cubeLocalCtrl2">
+  <div class="row" style="margin-top:6px;align-items:center;gap:10px"><label style="margin:0;white-space:nowrap">Zoom <span id="cubeZoomVal" class="tiny">1.0&times;</span></label><input id="cubeZoom" type="range" min="0" max="100" value="0" step="1" style="flex:1"></div>
+  <div class="row" style="margin-top:6px;align-items:center;gap:8px;flex-wrap:wrap">
+    <label style="margin:0;white-space:nowrap">Arrows <select id="cubeDensity" style="padding:4px 7px"><option value="dense" selected>Dense</option><option value="normal">Normal</option><option value="sparse">Sparse</option></select></label>
+    <label style="margin:0;white-space:nowrap;flex:1;min-width:130px;display:flex;align-items:center;gap:6px">Size <input id="cubeSize" type="range" min="60" max="180" value="120" step="5" style="flex:1"></label>
+  </div>
+  <div class="row" style="margin-top:6px;align-items:center;gap:8px;flex-wrap:wrap"><label style="margin:0;display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="cubePulse" style="width:auto;margin:0"> Pulse arrows</label><label style="margin:0;white-space:nowrap;flex:1;min-width:150px;display:flex;align-items:center;gap:6px">Pulse spd <input id="cubePulseSpd" type="range" min="25" max="300" value="100" step="5" style="flex:1"></label></div>
+  </div>
+  <div id="cubeLocalCap">
+  <div class="cfi"><ul>
+    <li>Each arrow is the <b>model wind</b> at a grid point and altitude, pointing the way the air <b>drifts</b>; color runs low → high (surface → ~18,000 ft). A <b>single-site volume</b> centred on your Airport/GPS point — <b>not</b> the flight path (that's the drift track above). <b>N/E/S/W</b> label the floor; <b>heights</b> label the axis. Tick <b>Follow flight path</b> to size the box to your projected drift and thread the <b style="color:#ff2df0">magenta track</b> through it (white dot = launch, amber = end); the <b>zoom</b> slider scales the whole volume uniformly &mdash; the path widens and climbs together, not just vertically. <b>Drag to rotate.</b></li>
+    <li><b>In flight:</b> arrows that fan out or twist with height (veer / backing) = <b>shear</b> — expect a bumpier ride and your drift direction shifting as you climb; tightly aligned arrows = a smooth, predictable column. Colour = altitude (surface → ~18,000 ft), so you can spot the level where the wind changes. Horizontal footprint is ~±25 NM — your actual local field.</li>
+    <li>Vertical axis uses standard-atmosphere heights for the pressure levels (10 m, 925, 850, 700, 500 hPa); horizontal spread is ~±25 NM around your site.</li>
+    <li>A target-time snapshot and a model-derived proxy — it shows structure (veer, shear, convergence), not a substitute for a sounding. Time animation is queued.</li>
+  </ul></div>
+  </div>
+  <div id="cubeSynCap" style="display:none">
+  <ul class="cap">
+    <li><b style="color:#ff6b6b">Red</b> columns = <b>warm advection</b> (warm air moving in, ahead of a warm front); <b style="color:#5b9dff">blue</b> = <b>cold advection</b> (behind a cold front). Column height &amp; opacity track advection strength — the back axis reads it in <b>°C/h</b>, and the floor label gives the column footprint &amp; total span. Drag the cube to rotate.</li>
+    <li><b>In flight:</b> a tall <b style="color:#ff6b6b">red</b> column = warm air arriving there — destabilizing, usually ahead of a warm front (building cloud, rising wind); a tall <b style="color:#5b9dff">blue</b> column = cold air arriving — post-frontal gusts, drying, clearing but bumpy. Read the masses against your launch at centre to see what’s moving toward you. Each column covers ~100 NM of ground; the whole field spans ~860 NM, so this is the big picture, not your local field.</li>
+    <li><b>Bias</b> fades one mass so you can see the other through it; <b>Extent</b> zooms from a tight local view out to the full ~990 mi grid.</li>
+    <li>Surface-only for now (one tilted layer); a true multi-level vertical stack is the planned upgrade. Model-derived proxy, valid ~now.</li>
+  </ul>
+  </div>
 </div>
 
 <div class="panel coll" data-sect="inversion" data-air="collapsed">
@@ -2682,8 +2687,8 @@
 
 
 <footer>
-  <div class="stamp" style="text-align:center;margin-bottom:8px">BUILD ZEPHYR-EYEBALL-2026.06.01-b345 · SHIPPED 2026-10-25T15:51:24Z · <span id="clock" style="color:var(--ne)">—</span></div>
-  ZEPHYR-EYEBALL-2026.06.01-b170 · shipped 2026-10-25T15:51:24Z · + US state borders on the pressure-bubble plan view + drift map pinch/wheel zoom + altitude-coloured track + default order pass 2 (consensus…turbulence between pressure bubbles and SIGMETs) + dawn/dusk window charts full width + chart label overlap fixes + convective plan-view centred + severe-kinematics hodograph sized like the main hodograph + wind-profile table "from°" + "→ to" drift-arrow column + default section order = reviewed order + "Default order" button + Flight category + VFR→IMC watch merged into one section + layout pass (arc contrast, centred maps/cube, full-width charts, bigger 15-min) + regional ~500 nm pressure tier + airmass-character line + Q-B: live drag-and-drop reorder (panel headers + visual tiles) + P4: advisories / 15-min gusts / pressure gradient in the verdict + audit batch 2 (dead code, consensus reasons, soft-ground window, UTC parse, shear band, elev prefill, request de-dupe, cache TTL) + audit batch (fog RH gate, inversion typing, 0-6 km gate, 429 retry, fetch timeouts) + drift-map distance arcs (1/3/5/7/10 NM, sector only) + S5: 15-minute HRRR surface wind/gust launch-window panel + S4: SIGMET / Convective SIGMET / CWA panel (polygon inside/distance, radius 30/50/100 nm) + S2: NWS forecaster-grid cross-check panel (wind, gust, transport wind, mixing height, sky, ceiling, vis, PoP) + S3: automatic 12 h METAR history + TAFs from api.weather.gov (paste kept as AWC fallback) + glance summaries for 10 more panels (decision, windows, metrics, inversion, airplane, icing, route, steering, thermals, drift) + visual-view modal shows the live panel (controls work inside) + render de-dupe (one debounced minimums listener; coalesced verdict re-render) + FAA night clocks (sunState: 1.1 / 91.209 / 61.57(b)) + clocks table + regulatory text corrections + freezing-precip (SLD) icing flag + warm-nose check + ensemble 3-day horizon + one ceiling definition (VV counts on NWS paths; model proxy consolidated) + no stale aux panels on site change (auxFail + cache site check) + all panels in every mode (completes b313: six id gates + .no-airplane removed) + target-hour resolver (nearest hour, visible warning; no silent 20Z fallback) + NWS-path density altitude fix (altimeter\u2192station pressure) + cruise alt MSL\u2192AGL for cruise winds + consensus refresh (ECMWF 9 km, HRRR/NBM/NAM, silent + interpolated-model accounting) + below-ground pressure-level guard (no negative cloud/icing bases) + METAR remarks (RMK) decoder (AO1/2, PK WND, WSHFT, PRESRR/FR, SLP, B/E, TS/CB loc, LTG, virga, T-group, tendency, sensor status) + all panels available in every mode (balloon/airplane/xc) + pressure-bubbles P3 (time scrubber + play + tightening/loosening tendency) + pressure-bubbles altitude slider (continuous interpolation 1000→700 hPa) + pressure-bubbles P2b (vertical decks SFC/925/850/700 + clearer arrow) + pressure-bubbles P2a (blended IDW fill + isobars, 49-pt grid, 90/300 nm domain) + pressure-bubbles P1 (surface MSLP field, 25-pt grid to 90 nm) + DOCTYPE / standards-mode fix (sticky topbar) + drift 3D drag-to-rotate (touch/mouse) + trends-vs-minimums bust identification (banner + per-card BELOW-MIN) + preflight tile concise verdict (trim red reason box) + flyability tile verdict-tape consolidation + outlook trend sparklines (7-day tether + multi-day) + AFD collapsed hazard badges (keyword scan) + cloud/fog collapsed glance (fog risk + ceiling) + alerts collapsed glance (count/severity/level) + daylight collapsed summary (dawn/sunrise/sunset/dusk quad) + balloon header badge spacing (consistent gap) + tether: mute above-ceiling levels + driver-aware subtitle + flyability tile de-dup (no double strip) + visual-tile scale-to-fit (no clip) + opt-in visual tile view + dashboard reorder (critical-first) + settings-to-bottom + freshest-possible METAR (require_qc=false + age + raw) + 7-day heat outlook chart + heat-index trend card + heat row in flyability ribbon + extreme heat & heat index panel + heat-burst watch panel + tether ring chip graded by severity + tether outlook evening ET-date ordering fix + tether outlook per-day drawer + tether outlook approaching-weather ring + 7-day tether outlook + Zulu axis on wind-consensus cards + Zulu axis on all micro-sparkline cards + heatmap caption overlap fix + Zulu axis/new-day on convective strip + Zulu axis on CAPE chart + hourly tether outlook strip + ZIP/place nearby-airports+METAR fix + place/ZIP location entry + tether graph overlap fix + tether v2 (wind-profile graph + thermals/precip/VFR/heat criteria) + balloon tether 0-250ft assessment + area-aware convective grade + SIGMET reality-check banner + airplane windows/ribbon scorer fix + field-softness v2 (ground-truth calibration + POI firmness tint) + multi-day flyability outlook + airplane conditions-based flyability windows + woods/tree-row drift-map layer + tree-surrounded landing flag + Expand/Collapse all + Back-to-top + Today’s Trend label declutter + severe hodograph viz (A2) + severe kinematics (bulk shear/SRH/Bunkers storm motion/storm mode) + two-tone confidence color (word=level, lean=lean) + Flyability collapsed verdict ribbon (dawn/dusk outlines, Z/ET axis) + Flyability dawn/dusk windows merged into primary panel + field-softness v1 (launch/landing trafficability) + POI tap fix (elementFromPoint + hit-pad) + POI tap-toast/path-cull/half-size + ground-site POI layer (schools/churches/parks, offline) + drift-map touch-action (S20/Android drag-pan fix) + ensemble convective-confidence readout (GEFS CAPE/precip member agreement) + unified cube Local⇄Synoptic toggle + widened shared synoptic grid to ~860 NM + front cube rotate/stacked sliders/°C-h axis + 3D front cube + AFD/fire-wx deep-links follow resolved WFO + forecast-confidence collapsed pill + model-consensus collapsed summary + atmosphere+flight-category under briefing + tightened rolling grid + frozen top-bar rework + merged Vertical+Wind profile + fix stuck banner + online-aware wording + sticky top bar (Refresh/Airport/shared Top-alt) + emergency manual mode (network-free) + offline cache + auto-restore (STALE banner) + profile plot axes swapped (altitude vertical) + drift map framed on track (cone clips, dynamic tiles) + 3D cube top-alt/density/size controls + structured NWS alerts -> verdict (warning=NO-GO / watch=CAUTION, failure-isolated) + Timeframe quick-pick (Current/Sunrise/Midday/Sunset + auto-Custom) + synoptic wider zoom + blatant launch marker + flyability now-highlight + watch-board minimum lines + multi-hour period labels + period labels (turb/ride) + period labels (6 more panels) + period labels (atmosphere/metrics) + verdict show-the-numbers + drift 3D aspect fix + cube vertical-motion tilt (opt-in) + Refresh re-pulls loaded heavy panels + ensemble model fallback + AFD empty-product resilience + auto-fetch upwind stations + cube declutter-on-zoom + cube 975/800 hPa barbs + larger heads + header Refresh (keeps site+airports) + 9-model consensus (failure-isolated) + uniform collapse + legacy fold-in + UI reorg/cleanup + thermal/soaring index + network resilience + NWS backup + manual conditions + 3D wind cube + airport radius finder · mode switch + focus + settings menu + airport-ID lookup + airplane verdict + components + VFR-into-IMC watch + DA performance + icing + ride quality + sun glare + synoptic map + frontal passage + clouds/layers/fog + personal minimums + briefing/verdict + flyability windows + daylight + wind heatmap + atmosphere + metrics + inversion + stations + radiosonde + drift via Open-Meteo; RainViewer radar; live Zulu clock; top-right button stack, build stamp relocated to footer.</footer>
+  <div class="stamp" style="text-align:center;margin-bottom:8px">BUILD ZEPHYR-EYEBALL-2026.06.01-b346 · SHIPPED 2026-10-25T15:53:19Z · <span id="clock" style="color:var(--ne)">—</span></div>
+  ZEPHYR-EYEBALL-2026.06.01-b170 · shipped 2026-10-25T15:53:19Z · + Drift consolidation: one section with 3D (topo ground plane) · Map · Plan · fronts cube + US state borders on the pressure-bubble plan view + drift map pinch/wheel zoom + altitude-coloured track + default order pass 2 (consensus…turbulence between pressure bubbles and SIGMETs) + dawn/dusk window charts full width + chart label overlap fixes + convective plan-view centred + severe-kinematics hodograph sized like the main hodograph + wind-profile table "from°" + "→ to" drift-arrow column + default section order = reviewed order + "Default order" button + Flight category + VFR→IMC watch merged into one section + layout pass (arc contrast, centred maps/cube, full-width charts, bigger 15-min) + regional ~500 nm pressure tier + airmass-character line + Q-B: live drag-and-drop reorder (panel headers + visual tiles) + P4: advisories / 15-min gusts / pressure gradient in the verdict + audit batch 2 (dead code, consensus reasons, soft-ground window, UTC parse, shear band, elev prefill, request de-dupe, cache TTL) + audit batch (fog RH gate, inversion typing, 0-6 km gate, 429 retry, fetch timeouts) + drift-map distance arcs (1/3/5/7/10 NM, sector only) + S5: 15-minute HRRR surface wind/gust launch-window panel + S4: SIGMET / Convective SIGMET / CWA panel (polygon inside/distance, radius 30/50/100 nm) + S2: NWS forecaster-grid cross-check panel (wind, gust, transport wind, mixing height, sky, ceiling, vis, PoP) + S3: automatic 12 h METAR history + TAFs from api.weather.gov (paste kept as AWC fallback) + glance summaries for 10 more panels (decision, windows, metrics, inversion, airplane, icing, route, steering, thermals, drift) + visual-view modal shows the live panel (controls work inside) + render de-dupe (one debounced minimums listener; coalesced verdict re-render) + FAA night clocks (sunState: 1.1 / 91.209 / 61.57(b)) + clocks table + regulatory text corrections + freezing-precip (SLD) icing flag + warm-nose check + ensemble 3-day horizon + one ceiling definition (VV counts on NWS paths; model proxy consolidated) + no stale aux panels on site change (auxFail + cache site check) + all panels in every mode (completes b313: six id gates + .no-airplane removed) + target-hour resolver (nearest hour, visible warning; no silent 20Z fallback) + NWS-path density altitude fix (altimeter\u2192station pressure) + cruise alt MSL\u2192AGL for cruise winds + consensus refresh (ECMWF 9 km, HRRR/NBM/NAM, silent + interpolated-model accounting) + below-ground pressure-level guard (no negative cloud/icing bases) + METAR remarks (RMK) decoder (AO1/2, PK WND, WSHFT, PRESRR/FR, SLP, B/E, TS/CB loc, LTG, virga, T-group, tendency, sensor status) + all panels available in every mode (balloon/airplane/xc) + pressure-bubbles P3 (time scrubber + play + tightening/loosening tendency) + pressure-bubbles altitude slider (continuous interpolation 1000→700 hPa) + pressure-bubbles P2b (vertical decks SFC/925/850/700 + clearer arrow) + pressure-bubbles P2a (blended IDW fill + isobars, 49-pt grid, 90/300 nm domain) + pressure-bubbles P1 (surface MSLP field, 25-pt grid to 90 nm) + DOCTYPE / standards-mode fix (sticky topbar) + drift 3D drag-to-rotate (touch/mouse) + trends-vs-minimums bust identification (banner + per-card BELOW-MIN) + preflight tile concise verdict (trim red reason box) + flyability tile verdict-tape consolidation + outlook trend sparklines (7-day tether + multi-day) + AFD collapsed hazard badges (keyword scan) + cloud/fog collapsed glance (fog risk + ceiling) + alerts collapsed glance (count/severity/level) + daylight collapsed summary (dawn/sunrise/sunset/dusk quad) + balloon header badge spacing (consistent gap) + tether: mute above-ceiling levels + driver-aware subtitle + flyability tile de-dup (no double strip) + visual-tile scale-to-fit (no clip) + opt-in visual tile view + dashboard reorder (critical-first) + settings-to-bottom + freshest-possible METAR (require_qc=false + age + raw) + 7-day heat outlook chart + heat-index trend card + heat row in flyability ribbon + extreme heat & heat index panel + heat-burst watch panel + tether ring chip graded by severity + tether outlook evening ET-date ordering fix + tether outlook per-day drawer + tether outlook approaching-weather ring + 7-day tether outlook + Zulu axis on wind-consensus cards + Zulu axis on all micro-sparkline cards + heatmap caption overlap fix + Zulu axis/new-day on convective strip + Zulu axis on CAPE chart + hourly tether outlook strip + ZIP/place nearby-airports+METAR fix + place/ZIP location entry + tether graph overlap fix + tether v2 (wind-profile graph + thermals/precip/VFR/heat criteria) + balloon tether 0-250ft assessment + area-aware convective grade + SIGMET reality-check banner + airplane windows/ribbon scorer fix + field-softness v2 (ground-truth calibration + POI firmness tint) + multi-day flyability outlook + airplane conditions-based flyability windows + woods/tree-row drift-map layer + tree-surrounded landing flag + Expand/Collapse all + Back-to-top + Today’s Trend label declutter + severe hodograph viz (A2) + severe kinematics (bulk shear/SRH/Bunkers storm motion/storm mode) + two-tone confidence color (word=level, lean=lean) + Flyability collapsed verdict ribbon (dawn/dusk outlines, Z/ET axis) + Flyability dawn/dusk windows merged into primary panel + field-softness v1 (launch/landing trafficability) + POI tap fix (elementFromPoint + hit-pad) + POI tap-toast/path-cull/half-size + ground-site POI layer (schools/churches/parks, offline) + drift-map touch-action (S20/Android drag-pan fix) + ensemble convective-confidence readout (GEFS CAPE/precip member agreement) + unified cube Local⇄Synoptic toggle + widened shared synoptic grid to ~860 NM + front cube rotate/stacked sliders/°C-h axis + 3D front cube + AFD/fire-wx deep-links follow resolved WFO + forecast-confidence collapsed pill + model-consensus collapsed summary + atmosphere+flight-category under briefing + tightened rolling grid + frozen top-bar rework + merged Vertical+Wind profile + fix stuck banner + online-aware wording + sticky top bar (Refresh/Airport/shared Top-alt) + emergency manual mode (network-free) + offline cache + auto-restore (STALE banner) + profile plot axes swapped (altitude vertical) + drift map framed on track (cone clips, dynamic tiles) + 3D cube top-alt/density/size controls + structured NWS alerts -> verdict (warning=NO-GO / watch=CAUTION, failure-isolated) + Timeframe quick-pick (Current/Sunrise/Midday/Sunset + auto-Custom) + synoptic wider zoom + blatant launch marker + flyability now-highlight + watch-board minimum lines + multi-hour period labels + period labels (turb/ride) + period labels (6 more panels) + period labels (atmosphere/metrics) + verdict show-the-numbers + drift 3D aspect fix + cube vertical-motion tilt (opt-in) + Refresh re-pulls loaded heavy panels + ensemble model fallback + AFD empty-product resilience + auto-fetch upwind stations + cube declutter-on-zoom + cube 975/800 hPa barbs + larger heads + header Refresh (keeps site+airports) + 9-model consensus (failure-isolated) + uniform collapse + legacy fold-in + UI reorg/cleanup + thermal/soaring index + network resilience + NWS backup + manual conditions + 3D wind cube + airport radius finder · mode switch + focus + settings menu + airport-ID lookup + airplane verdict + components + VFR-into-IMC watch + DA performance + icing + ride quality + sun glare + synoptic map + frontal passage + clouds/layers/fog + personal minimums + briefing/verdict + flyability windows + daylight + wind heatmap + atmosphere + metrics + inversion + stations + radiosonde + drift via Open-Meteo; RainViewer radar; live Zulu clock; top-right button stack, build stamp relocated to footer.</footer>
 
 <script>
 "use strict";
@@ -4655,6 +4660,19 @@ function drawTrack3D(sim,P){
   const proj=(nx,ny,alt)=>{const rx=nx*cs-ny*sn, ry=nx*sn+ny*cs; return[cx+rx*scH, yA(alt)-ry*scH*depthK];};
   const ringPts=(r,alt)=>{let pp=[];for(let a=0;a<=360;a+=15){const p=proj(r*Math.sin(a*Math.PI/180),r*Math.cos(a*Math.PI/180),alt);pp.push(p[0].toFixed(1)+","+p[1].toFixed(1));}return pp.join(" ");};
   let g="";
+  try{ // b346: topo ground plane under the 3D track. proj() is a parallel projection, so the Web-Mercator tile mosaic
+    // maps onto the ground ring with one affine matrix; clipped to the SFC ring; rotates with the view.
+    const lat0=driftLaunch?driftLaunch.lat:parseFloat($("#lat").value), lon0=driftLaunch?driftLaunch.lon:parseFloat($("#lon").value);
+    if(!isNaN(lat0)&&!isNaN(lon0)&&typeof lon2t==="function"){
+      let z=Math.round(Math.log2(156543.03*Math.cos(lat0*Math.PI/180)*scH/1852)); z=Math.max(6,Math.min(15,z));
+      let k, span, tx0,tx1,ty0,ty1;
+      for(;;){ const mpp=156543.03*Math.cos(lat0*Math.PI/180)/Math.pow(2,z); k=mpp/1852; span=rMax/k; const px0=lon2t(lon0,z)*256, py0=lat2t(lat0,z)*256;
+        tx0=Math.floor((px0-span)/256); tx1=Math.floor((px0+span)/256); ty0=Math.floor((py0-span)/256); ty1=Math.floor((py0+span)/256);
+        if((tx1-tx0+1)*(ty1-ty0+1)<=36||z<=6)break; z--; }
+      const px0=lon2t(lon0,z)*256, py0=lat2t(lat0,z)*256, a=scH*k*cs, c=scH*k*sn, bb=-depthK*scH*k*sn, d=depthK*scH*k*cs;
+      let imgs=""; for(let tx=tx0;tx<=tx1;tx++)for(let ty=ty0;ty<=ty1;ty++){ if(tx<0||ty<0||tx>=Math.pow(2,z)||ty>=Math.pow(2,z))continue; imgs+=`<image x="${(tx*256-px0).toFixed(1)}" y="${(ty*256-py0).toFixed(1)}" width="256.5" height="256.5" href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/${z}/${ty}/${tx}"/>`; }
+      g+=`<defs><clipPath id="t3Ground"><polygon points="${ringPts(rMax,0)}"/></clipPath></defs><g clip-path="url(#t3Ground)" opacity="0.92"><g transform="matrix(${a.toFixed(4)} ${bb.toFixed(4)} ${c.toFixed(4)} ${d.toFixed(4)} ${cx.toFixed(1)} ${cyBase.toFixed(1)})">${imgs}</g></g>`;
+    } }catch(_){}
   for(let alt=0;alt<=sim.maxAlt+1;alt+=500){const major=alt%1000===0;
     g+=`<polyline fill="none" stroke="var(--grid)" stroke-width="${major?0.8:0.5}" opacity="${major?0.7:0.35}" points="${ringPts(rMax,alt)}"/>`;
     const lab=alt===0?"SFC":(alt%1000===0?(alt/1000)+"k":(alt/1000).toFixed(1)+"k");
@@ -7060,8 +7078,13 @@ $("#fpRot").addEventListener("input",e=>{trackAz=parseInt(e.target.value,10)||0;
   host.addEventListener("pointermove",e=>{if(!drag)return;let na=Math.round(saz+(e.clientX-sx)*SENS);na=((na%360)+360)%360;if(na!==trackAz){trackAz=na;redraw();}e.preventDefault();});
   const end=()=>{drag=false;};host.addEventListener("pointerup",end);host.addEventListener("pointercancel",end);
 })();
-$("#fpPlan").addEventListener("click",()=>{trackMode="plan";$("#fpPlan").classList.add("primary");$("#fpThree").classList.remove("primary");renderTrack();});
-$("#fpThree").addEventListener("click",()=>{trackMode="3d";$("#fpThree").classList.add("primary");$("#fpPlan").classList.remove("primary");renderTrack();});
+// b346: three views in one section. "map" shows the topo drift map (#dmViewWrap); 3D / plan show #fpTrack.
+function setTrackMode(m){ trackMode=m; ["fpThree","fpMap","fpPlan"].forEach(id=>{const b=$("#"+id); if(b)b.classList.toggle("primary",(id==="fpThree"&&m==="3d")||(id==="fpMap"&&m==="map")||(id==="fpPlan"&&m==="plan"));});
+  const w=$("#dmViewWrap"), t=$("#fpTrack"); if(w)w.style.display=m==="map"?"":"none"; if(t)t.style.display=m==="map"?"none":"";
+  if(m==="map"){ if(!driftMap)loadDriftMap(); } else renderTrack(); }
+$("#fpPlan").addEventListener("click",()=>setTrackMode("plan"));
+$("#fpThree").addEventListener("click",()=>setTrackMode("3d"));
+{const mb=$("#fpMap"); if(mb)mb.addEventListener("click",()=>setTrackMode("map"));}
 $("#radLoad").addEventListener("click",loadRadar);
 {const _pb=$("#pbLoad"); if(_pb)_pb.addEventListener("click",loadPBubble);}
 {const _pd=$("#pbDomain"); if(_pd)_pd.addEventListener("change",()=>{const hb=$("#pbubbleBox"); if(hb&&hb.querySelector("svg"))loadPBubble();});}
@@ -8271,7 +8294,7 @@ function orderSave(a){try{localStorage.setItem(ORDER_KEY,JSON.stringify(a));}cat
 function sectionsParent(){return document.getElementById("sections");}
 function panelById(id){const par=sectionsParent();return par?par.querySelector(':scope>.panel[data-sect="'+id+'"]'):null;}
 function currentOrder(){const par=sectionsParent();return par?[...par.querySelectorAll(':scope>.panel[data-sect]')].map(p=>p.dataset.sect):[];}
-const DEFAULT_ORDER=["fcat","briefing","flyribbon","radar","min15","daylight","driftmap","convective","convmap","alerts","heatburst","drift","tether","heatstress","pbubble","consensus","watchboard","vprofile","profileplot","heatmap","inversion","turbulence","sigmet","nwsgrid","da","tthout","outlook","windows","atmosphere","clouds","ride","thermals","icing","afd","hodograph","kinematics","terrain","decision","steering","airplane","route","hsi","ensemble","metrics","synoptic","radiosonde","sources"]; // b343: Rusty's reviewed order (2026-10-25, second pass) // b339: Rusty's reviewed order (2026-10-25 screenshots)
+const DEFAULT_ORDER=["fcat","briefing","flyribbon","radar","min15","daylight","convective","convmap","alerts","heatburst","drift","tether","heatstress","pbubble","consensus","watchboard","vprofile","profileplot","heatmap","inversion","turbulence","sigmet","nwsgrid","da","tthout","outlook","windows","atmosphere","clouds","ride","thermals","icing","afd","hodograph","kinematics","terrain","decision","steering","airplane","route","hsi","ensemble","metrics","synoptic","radiosonde","sources"]; // b343: Rusty's reviewed order (2026-10-25, second pass) // b339: Rusty's reviewed order (2026-10-25 screenshots)
 function applyOrder(){const par=sectionsParent();if(!par)return;const o=orderLoad()||DEFAULT_ORDER;const all=[...par.querySelectorAll(':scope>.panel[data-sect]')];const byId={};all.forEach(p=>byId[p.dataset.sect]=p);const seq=(o||[]).filter(id=>byId[id]);all.forEach(p=>{if(!seq.includes(p.dataset.sect))seq.push(p.dataset.sect);});seq.forEach(id=>par.appendChild(byId[id]));}
 function buildSectMgr(){const ul=$("#sectMgr");if(!ul)return;ul.innerHTML="";currentOrder().forEach(id=>{const p=panelById(id);if(!p)return;const h=p.querySelector(":scope>h2");const label=(h?h.textContent:id).replace(/^[\u25b8\u25be]\s*/,"").trim();const col=p.classList.contains("collapsed");const li=document.createElement("li");li.dataset.sect=id;li.draggable=true;li.innerHTML='<span class="grip" title="drag to reorder">&#10303;</span><button type="button" class="mv up" title="move up">&#9650;</button><button type="button" class="mv dn" title="move down">&#9660;</button><span class="nm">'+label+'</span><button type="button" class="tg">'+(col?"Collapsed":"Expanded")+'</button>';ul.appendChild(li);});}
 function mgrMove(id,dir){const seq=currentOrder();const i=seq.indexOf(id),j=i+dir;if(i<0||j<0||j>=seq.length)return;seq.splice(j,0,seq.splice(i,1)[0]);orderSave(seq);applyOrder();buildSectMgr();}
@@ -8297,7 +8320,7 @@ buildProfTable();renderProfile();renderHodo();renderSteering();renderTrack();ren
 minsInit();
 $("#modeSel").value="balloon";setMode("balloon");a11yApply();
 let viewMode="detailed";
-const TILE_W={nwsgrid:"half",sigmet:"half",min15:"full",flyribbon:"full",convmap:"full",synoptic:"full",radar:"full",heatmap:"full",driftmap:"full",terrain:"full",route:"full",hsi:"full",tthout:"full",outlook:"full",heatstress:"full",profileplot:"full",hodograph:"third",kinematics:"third",da:"third",metrics:"third",daylight:"third",inversion:"third"};
+const TILE_W={nwsgrid:"half",sigmet:"half",min15:"full",flyribbon:"full",convmap:"full",synoptic:"full",radar:"full",heatmap:"full",drift:"full",terrain:"full",route:"full",hsi:"full",tthout:"full",outlook:"full",heatstress:"full",profileplot:"full",hodograph:"third",kinematics:"third",da:"third",metrics:"third",daylight:"third",inversion:"third"};
 function buildVisualGrid(){
   const grid=$("#visualGrid"), sec=document.getElementById("sections"); if(!grid||!sec)return;
   grid.innerHTML="";
