@@ -15,7 +15,7 @@ const { chromium } = require('playwright');
     try{ buildVisualGrid(); openTileModal("decision"); const inModal=!!document.querySelector("#vModal .panel.in-modal"); closeTileModal(); const restored=!!document.querySelector('#sections>.panel[data-sect="decision"]'); out.misc.push("tileModal ok="+(inModal&&restored)); }catch(e){ out.misc.push("tileModal: "+e.message); }
     try{ p4Signals("balloon"); p4Signals("airplane"); }catch(e){ out.misc.push("p4Signals: "+e.message); }
     try{ renderSigmets(); renderMin15(); renderNwsGrid(); }catch(e){ out.misc.push("newPanels: "+e.message); }
-    out.panels=document.querySelectorAll("#sections>.panel[data-sect]").length; out.grips=document.querySelectorAll(".panel>h2 .pgrip").length;
+    out.panels=document.querySelectorAll("#sections>.panel[data-sect]").length; out.nestedPanels=[...document.querySelectorAll('.panel[data-sect]')].filter(p=>p.parentElement.id!=='sections'&&p.closest('#sections')).map(p=>p.dataset.sect); out.expectedPanels=(typeof DEFAULT_ORDER!=='undefined')?DEFAULT_ORDER.length:null; out.grips=document.querySelectorAll(".panel>h2 .pgrip").length;
     return out;
   });
   await pg.waitForTimeout(800);
