@@ -1,0 +1,31 @@
+name: metar archive (one-off)
+on:
+  workflow_dispatch:
+    inputs:
+      station:
+        description: "ICAO without K (IEM id), e.g. MQJ"
+        default: "MQJ"
+      days:
+        description: "days of history"
+        default: "365"
+permissions:
+  contents: write
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch from IEM ASOS archive (routine + SPECI)
+        run: |
+          mkdir -p archive
+          ST="${{ github.event.inputs.station }}"; D="${{ github.event.inputs.days }}"
+          Y1=$(date -u -d "-$D days" +%Y); M1=$(date -u -d "-$D days" +%m); D1=$(date -u -d "-$D days" +%d)
+          Y2=$(date -u -d "+1 day" +%Y); M2=$(date -u -d "+1 day" +%m); D2=$(date -u -d "+1 day" +%d)
+          URL="https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py?station=$ST&data=metar&year1=$Y1&month1=$M1&day1=$D1&year2=$Y2&month2=$M2&day2=$D2&tz=Etc/UTC&format=onlycomma&latlon=no&elev=no&missing=M&trace=T&direct=no&report_type=2&report_type=3"
+          echo "$URL"
+          curl -sS -m 600 -A "zephyr-weather-eyeball metar-archive (github.com/grumby42)" -o "archive/K${ST}-metar-${D}d.csv" "$URL"
+          wc -l "archive/K${ST}-metar-${D}d.csv"; head -3 "archive/K${ST}-metar-${D}d.csv"
+      - name: Commit
+        run: |
+          git config user.name "zephyr-relay"; git config user.email "relay@users.noreply.github.com"
+          git add archive && git commit -m "archive: ${{ github.event.inputs.station }} METAR ${{ github.event.inputs.days }}d [skip ci]" && git push
