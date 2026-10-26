@@ -1,0 +1,9 @@
+{
+  "stations": ["KIND","KMIE","KMZZ","KUMP","KTYQ","KMQJ","KARR"],
+  "pirep_station": "KIND",
+  "pirep_nm": 150,
+  "pirep_age_h": 3,
+  "fb_region": "chi",
+  "metar_hours": 12,
+  "note": "Edit stations here; the relay workflow reads this file. Regions for winds aloft (FB): bos, mia, chi, dfw, slc, sfo."
+}

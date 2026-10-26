@@ -1,5 +1,5 @@
 /* Zephyr Weather Eyeball service worker. CACHE name is stamped per build by the build script. */
-const CACHE="zephyr-b353";
+const CACHE="zephyr-b354";
 const SHELL=["./","./index.html","./zephyr-weather-eyeball.html","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
 const TILE_HOSTS=["server.arcgisonline.com","tilecache.rainviewer.com","raw.githubusercontent.com"];
 const TILE_CACHE="zephyr-tiles-v1", TILE_MAX=600;
