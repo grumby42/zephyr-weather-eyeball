@@ -3,8 +3,13 @@
 <head>
 <!--
   Zephyr Debrief — post-flight track vs forecast (companion to Zephyr Weather Eyeball)
-  Build: ZEPHYR-DEBRIEF-2026.10.31-d001
-  Shipped (UTC): 2026-10-31T16:42:26Z
+  Build: ZEPHYR-DEBRIEF-2026.10.31-d002
+  Shipped (UTC): 2026-10-31T17:33:47Z
+  d002: approach-layer analysis (last 500 ft binned 0-25/25-50/50-100/100-200/200-500 ft AGL, ratio + veer vs the
+  200-500 ft band and vs the model 10 m wind), touchdown ground speed, last-200-ft descent rate, flight-ops scalars
+  (hours after sunrise, path/crow work ratio, time above 1,000 / below 500 ft, steering envelope actual vs forecast,
+  vertical roughness early/late), what-if landing cone from measured error (ledger, else this flight; floors 2 kt/15 deg),
+  ledger rows now carry approach + ops + hour-after-sunrise; ledger shows the approach-layer climatology.
   Single file, no backend, no keys. Import a KML (gx:Track) or GPX from your flight logger; the track stays in
   your browser. Forecast profiles come from Open-Meteo (latest run, or the run 1-2 days earlier via the
   previous-runs API). Not an official source; not a briefing. Repo: github.com/grumby42/zephyr-weather-eyeball
@@ -228,7 +233,7 @@
   <div class="panel"><h2>Calibration ledger</h2><div id="dbLedger"></div></div>
   <div class="panel"><h2>Track vs forecast</h2><div class="sect-sum" id="sum-debrief"></div><div id="dbBox"><div class="muted">Import a track to begin.</div></div></div>
   <div class="panel"><h2>Map</h2><div id="dbMap"><div class="muted">Loads with the track.</div></div></div>
-  <div class="stamp" style="text-align:center;margin-top:18px">ZEPHYR-DEBRIEF-2026.10.31-d001 · SHIPPED 2026-10-31T16:42:26Z · data: Open-Meteo, Esri World Topo · not a briefing — check 1800WXBRIEF</div>
+  <div class="stamp" style="text-align:center;margin-top:18px">ZEPHYR-DEBRIEF-2026.10.31-d002 · SHIPPED 2026-10-31T17:33:47Z · data: Open-Meteo, Esri World Topo · not a briefing — check 1800WXBRIEF</div>
 </div>
 <script>
 "use strict";
@@ -285,7 +290,7 @@ let debrief=null;
 
 let dbZoomAdj=0;
 function dbMapRender(){ const host=$("#dbMap"); if(!host)return; const D=debrief; if(!D||!D.pts||D.pts.length<2){host.innerHTML="";return;}
-  const P=D.pts; let mnLa=Infinity,mxLa=-Infinity,mnLo=Infinity,mxLo=-Infinity; const all=P.concat(D.fpath||[],(D.whatif&&D.whatif.ext)||[],(D.whatif&&D.whatif.path)||[]);
+  const P=D.pts; let mnLa=Infinity,mxLa=-Infinity,mnLo=Infinity,mxLo=-Infinity; const all=P.concat(D.fpath||[],(D.whatif&&D.whatif.ext)||[],(D.whatif&&D.whatif.path)||[],(D.whatif&&D.whatif.cone)||[]);
   all.forEach(q=>{mnLa=Math.min(mnLa,q.lat);mxLa=Math.max(mxLa,q.lat);mnLo=Math.min(mnLo,q.lon);mxLo=Math.max(mxLo,q.lon);});
   const cLa=(mnLa+mxLa)/2,cLo=(mnLo+mxLo)/2; let z=15; for(;z>=6;z--){ const fx=Math.abs(lon2t(mxLo,z)-lon2t(mnLo,z)), fy=Math.abs(lat2t(mnLa,z)-lat2t(mxLa,z)); if(Math.max(fx,fy)<=2.2)break; } z=Math.max(6,Math.min(16,z+dbZoomAdj));
   const fcx=lon2t(cLo,z),fcy=lat2t(cLa,z),x0=Math.floor(fcx)-2,y0=Math.floor(fcy)-2, PX=lon=>(lon2t(lon,z)-x0)*256, PY=lat=>(lat2t(lat,z)-y0)*256;
@@ -295,12 +300,12 @@ function dbMapRender(){ const host=$("#dbMap"); if(!host)return; const D=debrief
   const sw=(vbW*0.007).toFixed(2), poly=(pts,col,dash,w)=>pts.length>1?`<polyline points="${pts.map(q=>PX(q.lon).toFixed(1)+","+PY(q.lat).toFixed(1)).join(" ")}" fill="none" stroke="${col}" stroke-width="${w||sw}" ${dash?`stroke-dasharray="${dash}"`:""} stroke-linejoin="round"/>`:"";
   const A=P.filter((q,i)=>i%3===0||i===P.length-1); let g=poly(A,"#fff",null,(sw*2.2).toFixed(2))+poly(A,"#19c8e6");
   if(D.fpath)g+=poly(D.fpath,"#ffb347",`${(vbW*0.012).toFixed(1)} ${(vbW*0.008).toFixed(1)}`);
-  const W=D.whatif; if(W){ if(W.off&&W.path)g+=poly(W.path,"#c792ea","2 3")+`<circle cx="${PX(W.landOff.lon).toFixed(1)}" cy="${PY(W.landOff.lat).toFixed(1)}" r="${(vbW*0.012).toFixed(1)}" fill="#c792ea" stroke="#000"/>`; if(W.extra&&W.ext)g+=poly(W.ext,"#c792ea","2 3")+`<circle cx="${PX(W.ext[W.ext.length-1].lon).toFixed(1)}" cy="${PY(W.ext[W.ext.length-1].lat).toFixed(1)}" r="${(vbW*0.012).toFixed(1)}" fill="#c792ea" stroke="#000"/>`; }
+  const W=D.whatif; if(W){ if(W.cone&&W.cone.length>3)g+=`<polygon points="${W.cone.map(q=>PX(q.lon).toFixed(1)+","+PY(q.lat).toFixed(1)).join(" ")}" fill="#c792ea" fill-opacity="0.22" stroke="#c792ea" stroke-opacity="0.7" stroke-width="${(sw*0.6).toFixed(2)}" stroke-dasharray="2 2"/>`; if(W.off&&W.path)g+=poly(W.path,"#c792ea","2 3")+`<circle cx="${PX(W.landOff.lon).toFixed(1)}" cy="${PY(W.landOff.lat).toFixed(1)}" r="${(vbW*0.012).toFixed(1)}" fill="#c792ea" stroke="#000"/>`; if(W.extra&&W.ext)g+=poly(W.ext,"#c792ea","2 3")+`<circle cx="${PX(W.ext[W.ext.length-1].lon).toFixed(1)}" cy="${PY(W.ext[W.ext.length-1].lat).toFixed(1)}" r="${(vbW*0.012).toFixed(1)}" fill="#c792ea" stroke="#000"/>`; }
   const L0=P[D.i0],LN=P[P.length-1], mk=(q,col,lab)=>`<circle cx="${PX(q.lon).toFixed(1)}" cy="${PY(q.lat).toFixed(1)}" r="${(vbW*0.013).toFixed(1)}" fill="${col}" stroke="#000" stroke-width="1"/><text x="${(PX(q.lon)+vbW*0.02).toFixed(1)}" y="${(PY(q.lat)+vbW*0.01).toFixed(1)}" font-size="${(vbW*0.03).toFixed(1)}" fill="#fff" stroke="#000" stroke-width="0.6" paint-order="stroke">${lab}</text>`;
   g+=mk(L0,"#46c46a","lift-off")+mk(LN,"#19c8e6","landed"); if(D.fpath&&D.fpath.length>1)g+=mk(D.fpath[D.fpath.length-1],"#ffb347","forecast");
   const mpp=156543.03*Math.cos(cLa*Math.PI/180)/Math.pow(2,z), pxNm=1852/mpp, nice=[0.5,1,2,5,10,20].find(v=>v*pxNm>=vbW*0.18)||20, bx=vbX+vbW*0.04, by=vbY+vbW*0.95;
   g+=`<line x1="${bx.toFixed(1)}" y1="${by.toFixed(1)}" x2="${(bx+nice*pxNm).toFixed(1)}" y2="${by.toFixed(1)}" stroke="#fff" stroke-width="${(vbW*0.006).toFixed(2)}"/><text x="${bx.toFixed(1)}" y="${(by-vbW*0.012).toFixed(1)}" font-size="${(vbW*0.03).toFixed(1)}" fill="#fff" stroke="#000" stroke-width="0.6" paint-order="stroke">${nice} NM</text>`;
-  host.innerHTML=`<svg viewBox="${vbX.toFixed(1)} ${vbY.toFixed(1)} ${vbW.toFixed(1)} ${vbW.toFixed(1)}" width="100%" style="background:#0a0e14;border-radius:8px;display:block;max-width:640px;margin:0 auto" role="img" aria-label="Flight track on a topographic base">${tiles}${g}</svg><div class="tiny muted" style="margin-top:4px">Esri World Topo base · cyan = actual · orange dashed = forecast path · purple = what-if · zoom <button type="button" id="dbZi">+</button> <button type="button" id="dbZo">−</button></div>`;
+  host.innerHTML=`<svg viewBox="${vbX.toFixed(1)} ${vbY.toFixed(1)} ${vbW.toFixed(1)} ${vbW.toFixed(1)}" width="100%" style="background:#0a0e14;border-radius:8px;display:block;max-width:640px;margin:0 auto" role="img" aria-label="Flight track on a topographic base">${tiles}${g}</svg><div class="tiny muted" style="margin-top:4px">Esri World Topo base · cyan = actual · orange dashed = forecast path · purple = what-if (shaded fan = landing cone from your measured forecast error) · zoom <button type="button" id="dbZi">+</button> <button type="button" id="dbZo">−</button></div>`;
   const zi=$("#dbZi"),zo=$("#dbZo"); if(zi)zi.onclick=()=>{dbZoomAdj=Math.min(4,dbZoomAdj+1);dbMapRender();}; if(zo)zo.onclick=()=>{dbZoomAdj=Math.max(-4,dbZoomAdj-1);dbMapRender();};
 }
 function setSum(sel,html){ const e=$(sel); if(e)e.innerHTML=html||""; }
@@ -367,13 +372,21 @@ function ledgerSave(a){ try{ localStorage.setItem(LEDGER_KEY,JSON.stringify(a));
 function ledgerAddCurrent(){ const D=debrief; if(!D||!D.rows||!D.H)return false; const R=D.rows.filter(r=>isFinite(r.fk)&&isFinite(r.agl)).slice(1,-1); if(!R.length)return false;
   const L={}; R.forEach(r=>{ const k=Math.floor(Math.max(0,r.agl)/500)*500; (L[k]=L[k]||[]).push(r); });
   const layers={}; Object.keys(L).forEach(k=>{ const rs=L[k], mv=rs.filter(r=>r.gs>=4); layers[k]={n:rs.length,ds:+(rs.reduce((s,r)=>s+r.serr,0)/rs.length).toFixed(1),dd:mv.length?Math.round(mv.reduce((s,r)=>s+r.derr,0)/mv.length):null}; });
-  const row={id:D.name+"|"+new Date(D.pts[D.i0].t).toISOString().slice(0,16),date:new Date(D.pts[D.i0].t).toISOString().slice(0,16).replace("T"," ")+"Z",site:D.pts[D.i0].lat.toFixed(3)+","+D.pts[D.i0].lon.toFixed(3),model:D.model,runBack:D.runBack||0,min:Math.round((D.pts[D.pts.length-1].t-D.pts[D.i0].t)/60000),landErr:isFinite(D.landErrNm)?+D.landErrNm.toFixed(1):null,layers};
+  const row={id:D.name+"|"+new Date(D.pts[D.i0].t).toISOString().slice(0,16),date:new Date(D.pts[D.i0].t).toISOString().slice(0,16).replace("T"," ")+"Z",site:D.pts[D.i0].lat.toFixed(3)+","+D.pts[D.i0].lon.toFixed(3),model:D.model,runBack:D.runBack||0,min:Math.round((D.pts[D.pts.length-1].t-D.pts[D.i0].t)/60000),landErr:isFinite(D.landErrNm)?+D.landErrNm.toFixed(1):null,layers,
+    hrs:(()=>{const h=dbHrsAfterSunrise(D);return isFinite(h)?+h.toFixed(1):null;})(),month:new Date(D.pts[D.i0].t).getUTCMonth()+1,appr:(D.appr?{bins:D.appr.bins,ref:{spd:+D.appr.ref.spd.toFixed(1),to:Math.round(D.appr.ref.to)},fc10:D.appr.fc10?{spd:+D.appr.fc10.spd.toFixed(1),to:Math.round(D.appr.fc10.to)}:null,tdGs:D.appr.tdGs,descFpm:D.appr.descFpm}:null),
+    ops:(D.ops?{maxAgl:D.ops.maxAgl,work:isFinite(D.ops.work)?+D.ops.work.toFixed(2):null,steerDeg:isFinite(D.ops.steerDeg)?D.ops.steerDeg:null,fcSteerDeg:isFinite(D.ops.fcSteerDeg)?D.ops.fcSteerDeg:null,vrSdLate:D.ops.vrSdLate}:null)};
   const a=ledgerLoad().filter(x=>x.id!==row.id); a.push(row); ledgerSave(a); return true; }
 function ledgerHtml(){ const a=ledgerLoad(); if(!a.length)return '<div class="tiny muted">No flights kept yet. After a debrief, press <b>Keep for calibration</b>; the ledger accumulates your own forecast bias per layer across flights (this device).</div>';
   const agg={}; a.forEach(f=>Object.entries(f.layers||{}).forEach(([k,v])=>{ const g=(agg[k]=agg[k]||{n:0,ds:0,dd:0,nd:0}); g.n+=v.n; g.ds+=v.ds*v.n; if(v.dd!=null){g.dd+=v.dd*v.n; g.nd+=v.n;} }));
   let h=`<div class="tiny" style="margin:4px 0"><b>${a.length} flight${a.length===1?"":"s"} kept</b> \u00b7 per-layer bias = actual \u2212 forecast (positive speed = model light; positive direction = you drifted right of the model\u2019s "to")</div><table class="tbl" style="width:100%;font-size:12px"><thead><tr><th>ft AGL</th><th>minutes</th><th>speed bias kt</th><th>dir bias \u00b0</th></tr></thead><tbody>`;
   Object.keys(agg).map(Number).sort((x,y)=>x-y).forEach(k=>{ const g=agg[k]; h+=`<tr><td>${k}\u2013${k+499}</td><td>${g.n}</td><td>${(g.ds/g.n>=0?"+":"")+(g.ds/g.n).toFixed(1)}</td><td>${g.nd?(g.dd/g.nd>=0?"+":"")+Math.round(g.dd/g.nd):"\u2014"}</td></tr>`; });
-  h+=`</tbody></table><div class="tiny" style="margin-top:4px">${a.slice(-6).reverse().map(f=>`${afdEsc(f.date)} \u00b7 ${f.min} min \u00b7 ${afdEsc(String(f.model))}${f.landErr!=null?" \u00b7 landing \u0394 "+f.landErr+" nm":""}`).join("<br>")}</div>`;
+  h+=`</tbody></table>`;
+  const ap=a.filter(f=>f.appr&&f.appr.bins); if(ap.length){ // d002: approach-layer climatology — ratio / veer of each bin relative to 200\u2013500 ft, plus the model's 10 m wind
+    const G={}; let r10=[],v10=[]; ap.forEach(f=>{ Object.entries(f.appr.bins).forEach(([k,b])=>{ if(b.ratio==null)return; const g=(G[k]=G[k]||{n:0,r:0,v:0}); g.n++; g.r+=b.ratio; g.v+=b.veer; }); if(f.appr.fc10&&f.appr.fc10.spd>0.5&&f.appr.bins[0]){ r10.push(f.appr.bins[0].spd/f.appr.fc10.spd); v10.push(((f.appr.bins[0].to-f.appr.fc10.to+540)%360)-180); } });
+    h+=`<div class="tiny" style="margin:8px 0 4px"><b>Approach layer</b> \u00b7 ${ap.length} flight${ap.length===1?"":"s"} \u00b7 each band of the last 500 ft relative to the 200\u2013500 ft band (ratio = speed fraction; veer = + right of it)</div><table class="tbl" style="width:100%;font-size:12px"><thead><tr><th>ft AGL</th><th>n</th><th>speed ratio</th><th>veer \u00b0</th></tr></thead><tbody>`;
+    Object.keys(G).map(Number).sort((x,y)=>x-y).forEach(k=>{ const g=G[k], hi=(DB_APPR_BINS.find(b=>b[0]===k)||[k,k])[1]; h+=`<tr><td>${k}\u2013${hi}</td><td>${g.n}</td><td>${(g.r/g.n).toFixed(2)}</td><td>${(g.v/g.n>=0?"+":"")+Math.round(g.v/g.n)}</td></tr>`; });
+    h+=`</tbody></table>`; if(r10.length)h+=`<div class="tiny" style="margin-top:4px">Last 25 ft vs the model\u2019s 10 m wind: <b>${(r10.reduce((s,x)=>s+x,0)/r10.length).toFixed(2)}\u00d7</b> speed, <b>${(v10.reduce((s,x)=>s+x,0)/v10.length>=0?"+":"")+Math.round(v10.reduce((s,x)=>s+x,0)/v10.length)}\u00b0</b> (n=${r10.length}) \u2014 your field\u2019s surface layer, not the model\u2019s.</div>`; }
+  h+=`<div class="tiny" style="margin-top:4px">${a.slice(-6).reverse().map(f=>`${afdEsc(f.date)} \u00b7 ${f.min} min \u00b7 ${afdEsc(String(f.model))}${f.hrs!=null?" \u00b7 sunrise "+(f.hrs>=0?"+":"")+f.hrs+" h":""}${f.landErr!=null?" \u00b7 landing \u0394 "+f.landErr+" nm":""}${f.appr&&f.appr.tdGs!=null?" \u00b7 touchdown "+f.appr.tdGs+" kt":""}`).join("<br>")}</div>`;
   return h; }
 function dbScore(){ const D=debrief; if(!D)return; const P=D.pts, N=P.length, elevFt=(D.elevM||0)*3.28084, rows=[]; let i=D.i0;
   while(i<N-1){ let j=i; while(j<N-1&&P[j+1].t-P[i].t<60000)j++; if(j===i){i++;continue;}
@@ -386,6 +399,7 @@ function dbScore(){ const D=debrief; if(!D)return; const P=D.pts, N=P.length, el
   const fp=[{lat:P[D.i0].lat,lon:P[D.i0].lon,altM:P[D.i0].altM}]; let la=P[D.i0].lat, lo=P[D.i0].lon; const cosL=Math.cos(la*Math.PI/180);
   if(D.H)for(let k=D.i0+1;k<N;k++){ const dtH=(P[k].t-P[k-1].t)/3600000; if(!(dtH>0)||dtH>0.1)continue; const agl=Math.max(0,((P[k].altM+P[k-1].altM)/2)*3.28084-elevFt); const w=dbWindAt(P[k].t,isFinite(agl)?agl:0); if(!w)continue; la+=w.v*dtH/60; lo+=w.u*dtH/(60*cosL); if(k%5===0||k===N-1)fp.push({lat:la,lon:lo,altM:P[k].altM}); }
   D.fpath=fp; D.landErrNm=fp.length>1?dbHav(P[N-1].lat,P[N-1].lon,fp[fp.length-1].lat,fp[fp.length-1].lon):NaN;
+  try{ D.appr=dbApproach(); }catch(_){ D.appr=null; } try{ D.ops=dbOps(); }catch(_){ D.ops=null; } // d002
 }
 function dbWhatIf(){ const D=debrief; if(!D||!D.H)return null; const P=D.pts, N=P.length, elevFt=(D.elevM||0)*3.28084;
   const off=+(($("#dbOff")||{}).value||0), extra=+(($("#dbExtra")||{}).value||0), aglSel=$("#dbAgl")?$("#dbAgl").value:"last";
@@ -398,18 +412,66 @@ function dbWhatIf(){ const D=debrief; if(!D||!D.H)return null; const P=D.pts, N=
   const start=off?landOff:{lat:P[N-1].lat,lon:P[N-1].lon}; let la2=start.lat, lo2=start.lon; const ext=[{lat:la2,lon:lo2}]; const tEnd=P[N-1].t+off*60000;
   for(let m=1;m<=extra;m++){ const w=dbWindAt(tEnd+m*60000,agl); if(!w)break; la2+=w.v/60/60; lo2+=w.u/60/(60*cosL); if(m%5===0||m===extra)ext.push({lat:la2,lon:lo2}); }
   const wNow=dbWindAt(tEnd+Math.max(1,extra)*60000,agl)||{u:0,v:0};
-  D.whatif={off,extra,agl,path,landOff,ext,endSpd:Math.hypot(wNow.u,wNow.v),endTo:(Math.atan2(wNow.u,wNow.v)*180/Math.PI+360)%360,
+  const sig=extra?dbSigma(agl):null, cone=(extra&&sig)?dbCone(start,tEnd,agl,extra,sig):null; // d002
+  D.whatif={off,extra,agl,path,landOff,ext,sig,cone,endSpd:Math.hypot(wNow.u,wNow.v),endTo:(Math.atan2(wNow.u,wNow.v)*180/Math.PI+360)%360,
     offDist:dbHav(P[N-1].lat,P[N-1].lon,landOff.lat,landOff.lon),offBrg:dbBrg(P[N-1].lat,P[N-1].lon,landOff.lat,landOff.lon),
     extDist:dbHav(start.lat,start.lon,la2,lo2),extBrg:dbBrg(start.lat,start.lon,la2,lo2)};
   return D.whatif;
 }
+function dbSunriseMs(lat,lon,tMs){ // d002: NOAA/Williams sunrise (90.833° zenith) for the UTC date of tMs; ms UTC or NaN (polar)
+  const r=Math.PI/180, d=new Date(tMs), y=d.getUTCFullYear(), m=d.getUTCMonth()+1, dd=d.getUTCDate();
+  const N=Math.floor(275*m/9)-Math.floor((m+9)/12)*(1+Math.floor((y-4*Math.floor(y/4)+2)/3))+dd-30, lngH=lon/15, t=N+((6-lngH)/24), M=0.9856*t-3.289;
+  let L=(M+1.916*Math.sin(M*r)+0.02*Math.sin(2*M*r)+282.634+720)%360, RA=(Math.atan(0.91764*Math.tan(L*r))/r+360)%360; RA=(RA+(Math.floor(L/90)*90-Math.floor(RA/90)*90))/15;
+  const sinDec=0.39782*Math.sin(L*r), cosDec=Math.cos(Math.asin(sinDec)), cosH=(Math.cos(90.833*r)-sinDec*Math.sin(lat*r))/(cosDec*Math.cos(lat*r)); if(cosH>1||cosH<-1)return NaN;
+  const H=(360-Math.acos(cosH)/r)/15; let UT=(H+RA-0.06571*t-6.622-lngH)%24; if(UT<0)UT+=24; return Date.UTC(y,m-1,dd)+UT*3600000; }
+function dbHrsAfterSunrise(D){ const t=D.pts[D.i0].t, s=dbSunriseMs(D.pts[D.i0].lat,D.pts[D.i0].lon,t); if(!isFinite(s))return NaN; let h=(t-s)/3600000; if(h>12)h-=24; if(h<-12)h+=24; return h; }
+const DB_APPR_BINS=[[0,25],[25,50],[50,100],[100,200],[200,500]];
+function dbVecMean(P,idx){ // mean ground velocity (kt, °T "to") over consecutive fix pairs whose both ends are in idx (a Set of indices)
+  let e=0,n=0,sec=0; idx.forEach(i=>{ if(!idx.has(i+1))return; const a=P[i],b=P[i+1], dt=(b.t-a.t)/1000; if(!(dt>0)||dt>30)return; const cosL=Math.cos(a.lat*Math.PI/180); e+=(b.lon-a.lon)*60*cosL; n+=(b.lat-a.lat)*60; sec+=dt; });
+  if(sec<8)return null; const h=sec/3600; return {spd:Math.hypot(e,n)/h,to:(Math.atan2(e,n)*180/Math.PI+360)%360,sec}; }
+function dbApproach(){ // d002: the last 500 ft of the descent, binned by height above the LANDING point (the track's own ground, not the launch-site elevation)
+  const D=debrief; if(!D||!D.hasA)return null; const P=D.pts, N=P.length;
+  const gsAt=i=>{ let j=i; while(j>0&&P[i].t-P[j].t<10000)j--; const dt=(P[i].t-P[j].t)/3600000; return dt>0?dbHav(P[j].lat,P[j].lon,P[i].lat,P[i].lon)/dt:0; };
+  let E=N-1; while(E>D.i0+10&&gsAt(E)<1)E--; // last moving fix = touchdown/stop (loggers keep recording while you pack up)
+  let gm=0,gn=0; for(let i=E;i<N;i++){ if(isFinite(P[i].altM)){gm+=P[i].altM;gn++;} } const groundM=gn?gm/gn:P[E].altM; const agl=i=>(P[i].altM-groundM)*3.28084;
+  let s=E; while(s>D.i0&&(P[E].t-P[s].t)<20*60000&&agl(s)<500)s--; if(agl(s)<300)return null; // never above the layer in the last 20 min: no approach to score
+  const bins={}; DB_APPR_BINS.forEach(([lo,hi])=>{ const idx=new Set(); for(let i=s;i<=E;i++){ const a=agl(i); if(isFinite(a)&&a>=lo&&a<hi)idx.add(i); } const v=dbVecMean(P,idx); if(v)bins[lo]=v; });
+  const ref=bins[200]; if(!ref)return null; const tL=P[E].t, w10=D.H?dbWindAt(tL,33):null, fc10=w10?{spd:Math.hypot(w10.u,w10.v),to:(Math.atan2(w10.u,w10.v)*180/Math.PI+360)%360}:null;
+  const out={bins:{},ref,fc10,tLand:tL,groundFt:Math.round(groundM*3.28084),idxLand:E}; Object.keys(bins).forEach(k=>{ const b=bins[k]; out.bins[k]={spd:+b.spd.toFixed(1),to:Math.round(b.to),sec:Math.round(b.sec),ratio:ref.spd>0.5?+(b.spd/ref.spd).toFixed(2):null,veer:Math.round(((b.to-ref.to+540)%360)-180)}; });
+  let i=E; while(i>0&&P[E].t-P[i].t<15000)i--; const td=dbVecMean(P,new Set(Array.from({length:E-i+1},(_,k)=>i+k))); out.tdGs=td?+td.spd.toFixed(1):null; // ground speed over the 15 s before the stop
+  let j=E; while(j>s&&agl(j)<200)j--; const dtm=(P[E].t-P[j].t)/60000; out.descFpm=dtm>0.2?Math.round((agl(j)-Math.max(0,agl(E)))/dtm):null; // mean rate over the last 200 ft (low-contour time counts)
+  let sec0=0; for(let k=s+1;k<=E;k++){ if(agl(k)<50)sec0+=(P[k].t-P[k-1].t)/1000; } out.secBelow50=Math.round(sec0);
+  return out; }
+function dbOps(){ // d002: flight-ops scalars from the track alone
+  const D=debrief; if(!D)return null; const P=D.pts, N=P.length, elevFt=(D.elevM||0)*3.28084, agl=i=>P[i].altM*3.28084-elevFt, o={};
+  let path=0; for(let i=D.i0+1;i<N;i++)path+=dbHav(P[i-1].lat,P[i-1].lon,P[i].lat,P[i].lon); o.pathNm=path; o.crowNm=dbHav(P[D.i0].lat,P[D.i0].lon,P[N-1].lat,P[N-1].lon); o.work=o.crowNm>0.1?path/o.crowNm:NaN;
+  if(D.hasA){ let hi=0,lo=0,mx=0; for(let i=D.i0+1;i<N;i++){ const dt=(P[i].t-P[i-1].t)/60000, a=agl(i); if(!(dt>0)||dt>5||!isFinite(a))continue; if(a>=1000)hi+=dt; if(a<500)lo+=dt; if(a>mx)mx=a; } o.minAbove1k=Math.round(hi); o.minBelow500=Math.round(lo); o.maxAgl=Math.round(mx);
+    // vertical-rate roughness: sd of 10-s vertical rates (ft/min), first third vs last third of the flight
+    const vr=[]; for(let i=D.i0;i<N;i++){ let j=i; while(j<N-1&&P[j+1].t-P[i].t<10000)j++; if(j===i)continue; const dt=(P[j].t-P[i].t)/60000; if(dt>0&&isFinite(P[i].altM)&&isFinite(P[j].altM))vr.push({t:P[i].t,v:(P[j].altM-P[i].altM)*3.28084/dt}); i=j; }
+    const sd=a=>{ if(a.length<5)return NaN; const m=a.reduce((s,x)=>s+x,0)/a.length; return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/a.length); }; const k=Math.floor(vr.length/3); o.vrSdEarly=Math.round(sd(vr.slice(0,k).map(x=>x.v))); o.vrSdLate=Math.round(sd(vr.slice(-k).map(x=>x.v))); }
+  // steering envelope: spread of per-layer mean tracks (500-ft bins, moving minutes only)
+  const R=(D.rows||[]).filter(r=>isFinite(r.agl)&&r.gs>=4); const L={}; R.forEach(r=>{ const k=Math.floor(Math.max(0,r.agl)/500)*500; (L[k]=L[k]||[]).push(r.trk); });
+  const cm=xs=>(Math.atan2(xs.reduce((s,x)=>s+Math.sin(x*Math.PI/180),0),xs.reduce((s,x)=>s+Math.cos(x*Math.PI/180),0))*180/Math.PI+360)%360;
+  const dirs=Object.keys(L).filter(k=>L[k].length>=2).map(k=>cm(L[k])); let env=0; for(let a=0;a<dirs.length;a++)for(let b=a+1;b<dirs.length;b++)env=Math.max(env,Math.abs(((dirs[a]-dirs[b]+540)%360)-180)); o.steerDeg=dirs.length>=2?Math.round(env):NaN; o.steerLayers=dirs.length;
+  // forecast steering envelope over the same layers
+  if(D.H){ const fd=[]; Object.keys(L).filter(k=>L[k].length>=2).forEach(k=>{ const rs=(D.rows||[]).filter(r=>isFinite(r.fto)&&Math.floor(Math.max(0,r.agl)/500)*500===+k); if(rs.length)fd.push(cm(rs.map(r=>r.fto))); }); let fe=0; for(let a=0;a<fd.length;a++)for(let b=a+1;b<fd.length;b++)fe=Math.max(fe,Math.abs(((fd[a]-fd[b]+540)%360)-180)); o.fcSteerDeg=fd.length>=2?Math.round(fe):NaN; }
+  o.hrsAfterSunrise=dbHrsAfterSunrise(D); return o; }
+function dbSigma(agl){ // d002: forecast error spread for a layer — ledger first (this device's flights), else this flight's rows; floors 2 kt / 15°
+  const k=Math.floor(Math.max(0,agl)/500)*500, led=ledgerLoad(); let ds=[],dd=[],src="ledger";
+  led.forEach(f=>{ [k-500,k,k+500].forEach(kk=>{ const v=f.layers&&f.layers[kk]; if(v){ ds.push(Math.abs(v.ds)); if(v.dd!=null)dd.push(Math.abs(v.dd)); } }); });
+  if(ds.length<3){ src="this flight"; ds=[];dd=[]; (debrief.rows||[]).forEach(r=>{ if(isFinite(r.agl)&&Math.abs(r.agl-agl)<=750&&isFinite(r.serr)){ ds.push(Math.abs(r.serr)); if(r.gs>=4&&isFinite(r.derr))dd.push(Math.abs(r.derr)); } }); }
+  const mean=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:NaN; return {ds:Math.max(2,isFinite(mean(ds))?mean(ds):2),dd:Math.max(15,isFinite(mean(dd))?mean(dd):15),n:ds.length,src}; }
+function dbCone(start,tEnd,agl,extra,sig){ // d002: fan of landing points for the "fly longer" leg under ±sigma speed/direction error
+  const cosL=Math.cos(start.lat*Math.PI/180), leg=(fs,fd)=>{ let la=start.lat,lo=start.lon; for(let m=1;m<=extra;m++){ const w=dbWindAt(tEnd+m*60000,agl); if(!w)break; const sp=Math.max(0,Math.hypot(w.u,w.v)+fs), to=Math.atan2(w.u,w.v)+fd*Math.PI/180; la+=sp*Math.cos(to)/3600; lo+=sp*Math.sin(to)/(3600*cosL); } return {lat:la,lon:lo}; };
+  const poly=[start]; [-1,-0.5,0,0.5,1].forEach(f=>poly.push(leg(sig.ds,f*sig.dd))); [1,0.5,0,-0.5,-1].forEach(f=>poly.push(leg(-sig.ds,f*sig.dd))); return poly; }
 function dbCubeSVG(){ // b358: dedicated 3D view of the debrief — actual track (altitude-coloured) vs forecast path (orange dashed), rotatable
   const D=debrief; if(!D||!D.pts||D.pts.length<2)return "";
   const P=D.pts, i0=D.i0, la0=P[i0].lat, lo0=P[i0].lon, cosL=Math.cos(la0*Math.PI/180), elevFt=(D.elevM||0)*3.28084;
   const toXY=q=>({x:(q.lon-lo0)*60*cosL,y:(q.lat-la0)*60,alt:isFinite(q.altM)?Math.max(0,q.altM*3.28084-elevFt):0});
   const A=P.slice(i0).filter((q,i,arr)=>i%4===0||i===arr.length-1).map(toXY), F=(D.fpath||[]).map(toXY);
   const Wf=(D.whatif&&D.whatif.ext&&D.whatif.ext.length>1)?D.whatif.ext.map(q=>Object.assign(toXY(q),{alt:D.whatif.agl||0})):[], Wo=(D.whatif&&D.whatif.off&&D.whatif.path)?D.whatif.path.map(q=>Object.assign(toXY(q),{alt:0})):[];
-  const all=A.concat(F,Wf,Wo); const rMax=Math.max(1,...all.map(q=>Math.hypot(q.x,q.y)))*1.1, maxAlt=Math.max(1000,...A.map(q=>q.alt));
+  const Wc=(D.whatif&&D.whatif.cone)?D.whatif.cone.map(q=>Object.assign(toXY(q),{alt:0})):[];
+  const all=A.concat(F,Wf,Wo,Wc); const rMax=Math.max(1,...all.map(q=>Math.hypot(q.x,q.y)))*1.1, maxAlt=Math.max(1000,...A.map(q=>q.alt));
   const W=600,H=380,cx=W/2,cyBase=290,cyTop=70,Vspan=cyBase-cyTop,depthK=0.34,maxRpx=215,scH=maxRpx/rMax, az=+(($("#dbAz")||{}).value||0), th=az*Math.PI/180, cs=Math.cos(th), sn=Math.sin(th);
   const yA=alt=>cyBase-(Math.min(alt,maxAlt)/maxAlt)*Vspan, proj=(x,y,alt)=>{const rx=x*cs-y*sn, ry=x*sn+y*cs; return [cx+rx*scH, yA(alt)-ry*scH*depthK];};
   const ring=(r,alt)=>{let o=[];for(let a=0;a<=360;a+=15){const p=proj(r*Math.sin(a*Math.PI/180),r*Math.cos(a*Math.PI/180),alt);o.push(p[0].toFixed(1)+","+p[1].toFixed(1));}return o.join(" ");};
@@ -421,6 +483,7 @@ function dbCubeSVG(){ // b358: dedicated 3D view of the debrief — actual track
   const line=(pts,alt,color,w,dash,op)=>pts.length>1?`<polyline fill="none" stroke="${color}" stroke-width="${w}" ${dash?`stroke-dasharray="${dash}"`:""} opacity="${op}" points="${pts.map(q=>{const p=proj(q.x,q.y,alt==null?q.alt:alt);return p[0].toFixed(1)+","+p[1].toFixed(1);}).join(" ")}"/>`:"";
   g+=line(A,0,"#19c8e6",1.2,null,0.45)+line(F,0,"#ffb347",1,"4 3",0.5); // ground shadows
   for(let i=0;i<A.length;i+=Math.max(1,Math.round(A.length/14))){ const p1=proj(A[i].x,A[i].y,A[i].alt), p0=proj(A[i].x,A[i].y,0); g+=`<line x1="${p0[0].toFixed(1)}" y1="${p0[1].toFixed(1)}" x2="${p1[0].toFixed(1)}" y2="${p1[1].toFixed(1)}" stroke="#8899aa" stroke-width="0.6" opacity="0.6"/>`; }
+  if(Wc.length>3)g+=`<polygon points="${Wc.map(q=>{const p=proj(q.x,q.y,0);return p[0].toFixed(1)+","+p[1].toFixed(1);}).join(" ")}" fill="#c792ea" fill-opacity="0.2" stroke="#c792ea" stroke-opacity="0.6" stroke-width="0.6"/>`;
   g+=line(Wo,0,"#c792ea",1.6,"2 3",0.9)+line(Wf,null,"#c792ea",2,"2 3",0.95);
   g+=line(F,null,"#ffb347",2.2,"6 4",0.95);
   for(let i=1;i<A.length;i++){ const a=A[i-1],b=A[i],f=Math.min(1,((a.alt+b.alt)/2)/maxAlt), p=proj(a.x,a.y,a.alt), q=proj(b.x,b.y,b.alt); g+=`<line x1="${p[0].toFixed(1)}" y1="${p[1].toFixed(1)}" x2="${q[0].toFixed(1)}" y2="${q[1].toFixed(1)}" stroke="hsl(${Math.round(f*120)},85%,50%)" stroke-width="3" stroke-linecap="round"/>`; }
@@ -457,8 +520,14 @@ function renderDebrief(){ const host=$("#dbBox"); if(!host)return; const D=debri
     [180,270,360].forEach(v=>g+=`<text x="${pl-3}" y="${(Y2(v)+3).toFixed(1)}" font-size="7" fill="var(--faint)" text-anchor="end">${v%360||360}</text>`);
     g+=`</svg><div class="tiny muted">solid = actual (GPS) · dashed = forecast at that altitude &amp; minute · top: speed · bottom: track / drift-to (°T)</div>`; h+=g;
   }
+  { const o=D.ops, ap=D.appr, f1=(x,d)=>isFinite(x)?x.toFixed(d):"\u2014"; // d002: flight-ops scalars + approach layer
+    if(o){ h+=`<div class="tiny" style="margin-top:10px;border-top:1px solid var(--edge);padding-top:8px"><b>Flight ops</b> \u00b7 lift-off <b>${isFinite(o.hrsAfterSunrise)?(o.hrsAfterSunrise>=0?"+":"")+o.hrsAfterSunrise.toFixed(1)+" h":"\u2014"}</b> from sunrise \u00b7 path ${f1(o.pathNm,1)} nm vs crow ${f1(o.crowNm,1)} nm (work ${f1(o.work,2)}\u00d7)${D.hasA?` \u00b7 max <b>${o.maxAgl.toLocaleString()} ft AGL</b> \u00b7 ${o.minAbove1k} min above 1,000 ft \u00b7 ${o.minBelow500} min below 500 ft`:""} \u00b7 steering envelope <b>${isFinite(o.steerDeg)?o.steerDeg+"\u00b0":"\u2014"}</b> across ${o.steerLayers} layers${isFinite(o.fcSteerDeg)?` (forecast promised ${o.fcSteerDeg}\u00b0)`:""}${isFinite(o.vrSdLate)?` \u00b7 vertical roughness early/late <b>${o.vrSdEarly}/${o.vrSdLate} fpm</b>`:""}</div>`; }
+    if(ap){ h+=`<div class="tiny" style="margin-top:6px"><b>Approach layer</b> (last 500 ft of the descent) \u00b7 touchdown <b>${ap.tdGs!=null?ap.tdGs+" kt":"\u2014"}</b> at ${ap.groundFt.toLocaleString()} ft MSL${ap.secBelow50?` \u00b7 ${ap.secBelow50} s below 50 ft`:""}${ap.descFpm!=null?` \u00b7 last 200 ft at <b>${ap.descFpm} fpm</b>`:""}${ap.fc10?` \u00b7 model 10 m wind at landing ${Math.round(ap.fc10.spd)} kt to ${String(Math.round(ap.fc10.to)).padStart(3,"0")}\u00b0`:""}</div><div class="tblwrap"><table class="tbl" style="width:100%;font-size:12px"><thead><tr><th>ft AGL</th><th>sec</th><th>gs kt</th><th>track</th><th>vs 200\u2013500</th></tr></thead><tbody>`;
+      DB_APPR_BINS.forEach(([lo,hi])=>{ const b=ap.bins[lo]; if(!b)return; h+=`<tr><td>${lo}\u2013${hi}</td><td>${b.sec}</td><td>${b.spd}</td><td>${String(b.to).padStart(3,"0")}\u00b0</td><td>${lo===200?"ref":(b.ratio!=null?b.ratio.toFixed(2)+"\u00d7 "+(b.veer>=0?"+":"")+b.veer+"\u00b0":"\u2014")}</td></tr>`; });
+      h+=`</tbody></table></div><div class="tiny muted">No public model resolves the lowest 100 ft; this table is your own field\u2019s surface layer. Keep flights and the ledger builds a ratio/veer climatology you can brief landings with.</div>`; }
+    else if(D.hasA)h+=`<div class="tiny muted" style="margin-top:6px">Approach layer: not scored \u2014 the track never came down through 300\u2192500 ft AGL in its last 20 minutes.</div>`; }
   // 3D cube (b358) — actual (altitude-coloured, cyan shadow) vs forecast path (orange dashed); rotatable; the 2D charts above stay
-  h+=`<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;border-top:1px solid var(--edge);padding-top:8px"><b class="tiny">3D — actual vs forecast</b><label class="tiny" style="margin:0;white-space:nowrap">rotate <span id="dbAzLbl">${+(($("#dbAz")||{}).value||0)}°</span></label><input id="dbAz" type="range" min="0" max="360" step="5" value="${+(($("#dbAz")||{}).value||0)}" style="flex:1;min-width:120px"></div><div id="dbCube">${dbCubeSVG()}</div><div class="tiny muted">track colour = altitude (red surface → green top) · cyan shadow = actual ground track · orange dashed = forecast path on your altitude profile · purple = what-if legs · rings every 1,000 ft</div>`;
+  h+=`<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;border-top:1px solid var(--edge);padding-top:8px"><b class="tiny">3D — actual vs forecast</b><label class="tiny" style="margin:0;white-space:nowrap">rotate <span id="dbAzLbl">${+(($("#dbAz")||{}).value||0)}°</span></label><input id="dbAz" type="range" min="0" max="360" step="5" value="${+(($("#dbAz")||{}).value||0)}" style="flex:1;min-width:120px"></div><div id="dbCube">${dbCubeSVG()}</div><div class="tiny muted">track colour = altitude (red surface → green top) · cyan shadow = actual ground track · orange dashed = forecast path on your altitude profile · purple = what-if legs, shaded fan = landing cone · rings every 1,000 ft</div>`;
   // what-if controls
   h+=`<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;border-top:1px solid var(--edge);padding-top:8px"><b class="tiny">What-if</b>
     <label class="tiny">launch <select id="dbOff">${[-60,-45,-30,-15,0,15,30,45,60].map(v=>`<option value="${v}"${v===0?" selected":""}>${v>0?"+":""}${v} min</option>`).join("")}</select></label>
@@ -468,7 +537,7 @@ function renderDebrief(){ const host=$("#dbBox"); if(!host)return; const D=debri
     <div class="tiny muted" style="margin-top:8px">Actual track (cyan), forecast path (orange dashed) and what-if legs (purple) are drawn on the map below. Track is held in memory only unless you keep it for calibration.</div>`;
   host.innerHTML=h; {const az=$("#dbAz"); if(az){ let raf=null; az.addEventListener("input",()=>{ if(raf==null)raf=requestAnimationFrame(()=>{raf=null; dbCubeRedraw();}); }); }}
   const rb=$("#dbRun"); if(rb)rb.onclick=()=>{ const w=dbWhatIf(); const box=$("#dbWhatIf"); if(!w){ if(box)box.textContent="Forecast profile unavailable."; return; }
-    if(box)box.innerHTML=`${w.off?`Launch <b>${w.off>0?"+":""}${w.off} min</b>: same altitude profile lands <b>${w.offDist.toFixed(1)} nm</b> (brg ${String(Math.round(w.offBrg)).padStart(3,"0")}°) from the real landing. `:""}${w.extra?`Fly <b>+${w.extra} min</b> at ~${Math.round(w.agl)} ft AGL: <b>${w.extDist.toFixed(1)} nm</b> further, bearing ${String(Math.round(w.extBrg)).padStart(3,"0")}°, forecast wind there ${Math.round(w.endSpd)} kt toward ${String(Math.round(w.endTo)).padStart(3,"0")}° — check the Map view for landing options along that leg.`:""}${!w.off&&!w.extra?"Pick an offset or extra minutes.":""}`;
+    if(box)box.innerHTML=`${w.off?`Launch <b>${w.off>0?"+":""}${w.off} min</b>: same altitude profile lands <b>${w.offDist.toFixed(1)} nm</b> (brg ${String(Math.round(w.offBrg)).padStart(3,"0")}°) from the real landing. `:""}${w.extra?`Fly <b>+${w.extra} min</b> at ~${Math.round(w.agl)} ft AGL: <b>${w.extDist.toFixed(1)} nm</b> further, bearing ${String(Math.round(w.extBrg)).padStart(3,"0")}°, forecast wind there ${Math.round(w.endSpd)} kt toward ${String(Math.round(w.endTo)).padStart(3,"0")}°${w.sig?` \u00b7 <b>cone</b> \u00b1${w.sig.ds.toFixed(0)} kt / \u00b1${Math.round(w.sig.dd)}\u00b0 (${w.sig.src}${w.sig.n?", n="+w.sig.n:""}) drawn on the map and cube`:""} — check the Map view for landing options along that leg.${(()=>{ const L=ledgerLoad().filter(f=>f.appr&&f.appr.bins&&f.appr.bins[0]&&f.appr.bins[0].ratio!=null); if(!L.length)return ""; const r=L.reduce((s,f)=>s+f.appr.bins[0].ratio,0)/L.length, v=L.reduce((s,f)=>s+f.appr.bins[0].veer,0)/L.length; return ` <span style="color:var(--amber)">Landing layer (your ledger, n=${L.length}): expect the last 25 ft to run ~${Math.round(r*100)}% of the 200\u2013500 ft wind, ${Math.abs(v)<5?"same direction":(v>0?"veered ":"backed ")+Math.round(Math.abs(v))+"\u00b0"}.</span>`; })()}`:""}${!w.off&&!w.extra?"Pick an offset or extra minutes.":""}`;
     dbCubeRedraw(); try{ dbMapRender(); }catch(_){} };
   const R2=(D.rows||[]).filter(r=>isFinite(r.derr)&&r.gs>=4); const mad=R2.length?R2.reduce((s,r)=>s+Math.abs(r.derr),0)/R2.length:NaN;
   setSum("#sum-debrief",`<strong>${afdEsc(D.name.replace(/\.(kml|gpx)$/i,""))}</strong> <span class="tiny muted">· ${Math.round(dur)} min · ${crow.toFixed(1)} nm${isFinite(mad)?` · |Δdir| ${Math.round(mad)}°`:""}${isFinite(D.landErrNm)?` · fc landing Δ ${D.landErrNm.toFixed(1)} nm`:""}</span>`);
