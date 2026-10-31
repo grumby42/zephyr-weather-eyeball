@@ -1,6 +1,6 @@
 /* Zephyr Weather Eyeball service worker. CACHE name is stamped per build by the build script. */
-const CACHE="zephyr-b358";
-const SHELL=["./","./index.html","./zephyr-weather-eyeball.html","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
+const CACHE="zephyr-b359";
+const SHELL=["./","./index.html","./zephyr-weather-eyeball.html","./zephyr-debrief.html","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];
 const TILE_HOSTS=["server.arcgisonline.com","tilecache.rainviewer.com","raw.githubusercontent.com"];
 const TILE_CACHE="zephyr-tiles-v1", TILE_MAX=600;
 self.addEventListener("install",e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())); });

@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+  Zephyr Debrief — post-flight track vs forecast (companion to Zephyr Weather Eyeball)
+  Build: ZEPHYR-DEBRIEF-2026.10.31-d001
+  Shipped (UTC): 2026-10-31T16:42:26Z
+  Single file, no backend, no keys. Import a KML (gx:Track) or GPX from your flight logger; the track stays in
+  your browser. Forecast profiles come from Open-Meteo (latest run, or the run 1-2 days earlier via the
+  previous-runs API). Not an official source; not a briefing. Repo: github.com/grumby42/zephyr-weather-eyeball
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zephyr Debrief — track vs forecast</title>
+<meta name="theme-color" content="#0a0e14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Chakra+Petch:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0f14;--panel:#121821;--panel2:#0e131b;--edge:#1f2a37;
+    --ink:#e8eef5;--dim:#8295a8;--faint:#5a6b7d;
+    --ne:#3fb6a8;--amber:#e0a32e;--green:#46c46a;--red:#e2564b;--grid:#1a232f;--nowln:#fff;--afdConv:#ffd0cb;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --disp:'Chakra Petch',var(--mono);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 500px at 80% -10%,var(--glow,#14202c) 0%,transparent 60%),var(--bg);
+    color:var(--ink);font-family:var(--mono);font-size:14px;line-height:1.55;padding:18px;max-width:1080px;margin:0 auto}
+  h1,h2,h3{font-family:var(--disp);font-weight:600;letter-spacing:.04em;margin:0}
+  a{color:var(--ne);text-decoration:none;border-bottom:1px dotted var(--faint)}
+  a:hover{border-bottom-color:var(--ne)}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1px solid var(--edge);padding-bottom:12px;margin-bottom:16px;flex-wrap:wrap}
+  .headbtns{display:flex;flex-direction:column;gap:6px;align-items:stretch;flex:0 0 auto}
+  .headbtns button{white-space:nowrap}
+  .head h1{font-size:22px;text-transform:uppercase}
+  .head .sub{color:var(--dim);font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+  .stamp{text-align:right;color:var(--faint);font-size:10.5px;letter-spacing:.08em}
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--edge);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+  .panel>h2{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .panel>h2{flex-wrap:wrap;row-gap:4px}
+  .srcl{max-width:46%;overflow:hidden;text-overflow:ellipsis}
+  .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:4px 0}
+  .tblwrap table{min-width:420px}
+  .pgrip{margin-left:auto;cursor:grab;touch-action:none;user-select:none;color:var(--faint);font-size:15px;line-height:1;padding:2px 6px;border-radius:5px}
+  .pgrip:hover{color:var(--txt);background:var(--edge)}
+  .vtile h3 .pgrip{float:right;font-size:13px;padding:0 4px}
+  .pdrag{opacity:.5;outline:2px dashed var(--amber)}
+  .pover-top{box-shadow:0 -3px 0 0 var(--amber)}
+  .pover-bot{box-shadow:0 3px 0 0 var(--amber)}
+  .vtile.pover-top{box-shadow:-3px 0 0 0 var(--amber)}
+  .vtile.pover-bot{box-shadow:3px 0 0 0 var(--amber)}
+  .panel>h2::before{content:"";width:7px;height:7px;border-radius:1px;background:var(--ne)}
+  label{display:block;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:4px}
+  input,textarea,button,select{font-family:var(--mono);font-size:13px;color:var(--ink);background:var(--inbg,#0a0e14);border:1px solid var(--edge);border-radius:6px;padding:8px 10px}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--ne)}
+  button{cursor:pointer;background:var(--btn,#15202c);border-color:var(--btnEdge,#243240);letter-spacing:.06em;text-transform:uppercase;font-size:11px;font-weight:600;transition:.12s}
+  button:hover{background:var(--btnHov,#1c2a38);border-color:var(--ne)}
+  button:active{transform:scale(.985)}
+  button.primary{background:var(--btnPri,#173a36);border-color:var(--btnPriEdge,#2f9159);color:var(--btnPriInk,#cdf6da)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .grow{flex:1;min-width:160px}
+  .muted{color:var(--dim);font-size:12px}
+  .poiTog{font-size:11.5px;padding:3px 9px;border-radius:6px;border:1px solid var(--faint);background:transparent;color:var(--dim);cursor:pointer;font-family:inherit}
+  .poiTog[aria-pressed="true"]{background:var(--ne);color:#fff;border-color:var(--ne)}
+  .poiDot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  .tiny{font-size:10.5px;color:var(--faint);letter-spacing:.06em}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+  .card{background:var(--inbg,#0a0e14);border:1px solid var(--edge);border-radius:8px;padding:10px 12px}
+  .card .id{font-family:var(--disp);font-size:15px;letter-spacing:.05em}
+  .card .wind{font-size:20px;font-weight:600;margin:2px 0}
+  .card .meta{font-size:10.5px;color:var(--faint);letter-spacing:.05em}
+  .badge{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-top:6px}
+  .b-up{background:#3a1d1a;color:#f0a89f;border:1px solid #6e2b22}
+  .b-hold{background:#33291a;color:#f0cd8e;border:1px solid #6e561f}
+  .b-down{background:#163326;color:#9fe4b6;border:1px solid #1f6e44}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--grid)}
+  th{color:var(--dim);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:500}
+  td input{width:64px;padding:5px 6px;text-align:center}
+  td.src{color:var(--dim);font-size:10px}
+  .thresh{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:6px}
+  .verdict{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  #fpTrack{touch-action:pan-y;cursor:ew-resize}
+  .lamp{width:74px;height:74px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.05em;text-align:center;border:1px solid var(--edge);background:#0a0e14;color:var(--faint);flex:0 0 auto}
+  .lamp.on-go{background:radial-gradient(circle at 50% 35%,#1d6e3f,#0f3a22);color:#cdf6da;border-color:#2f9159;box-shadow:0 0 22px -6px #46c46a}
+  .lamp.on-cau{background:radial-gradient(circle at 50% 35%,#7a5a18,#3d2d0c);color:#ffe7af;border-color:#b8861f;box-shadow:0 0 22px -6px #e0a32e}
+  .lamp.on-no{background:radial-gradient(circle at 50% 35%,#7a2820,#3d130f);color:#ffd2cb;border-color:#b8392c;box-shadow:0 0 22px -6px #e2564b}
+  .reasons{flex:1;min-width:240px;padding:0;margin:0}
+  .reasons li{margin:3px 0;font-size:12.5px;list-style:none}
+  .reasons li::before{content:"›";color:var(--ne);margin-right:8px}
+  .reasons li.warn::before{content:"!";color:var(--amber)}
+  .reasons li.bad::before{content:"✕";color:var(--red)}
+  .links{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12px}
+  .lk{display:flex;gap:12px;align-items:baseline;margin:7px 0}
+  .lkhdr{flex:0 0 72px;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);padding-top:2px}
+  .hodolegend{display:grid;grid-template-columns:repeat(auto-fit,minmax(94px,1fr));gap:3px 10px;font-size:10px;color:var(--dim);margin-top:10px}
+  ul.cap{margin:8px 0 0;padding-left:18px;font-size:12px;color:var(--dim)} ul.cap li{margin:2.5px 0} ul.cap b{color:var(--ink)}
+  .tip{margin-top:8px;padding:7px 11px;border-left:3px solid var(--ne);background:var(--panel2);border-radius:0 6px 6px 0;font-size:12px;color:var(--ink)}
+  .tip::before{content:"▸ TIP   ";color:var(--ne);font-weight:700;font-family:var(--disp);font-size:10px;letter-spacing:.06em}
+  .cfi{margin-top:8px;padding:7px 11px;border-left:3px solid var(--amber);background:var(--panel2);border-radius:0 6px 6px 0;font-size:12px;color:var(--dim)}
+  .cfi::before{content:"CFI / DPE NOTE   ";color:var(--amber);font-weight:700;font-family:var(--disp);font-size:10px;letter-spacing:.06em}
+  .cfi b{color:var(--ink)}
+  body.night{--bg:#0a0403;--panel:#160a08;--panel2:#0e0605;--edge:#3a1512;--ink:#ff7a66;--dim:#c25844;--faint:#85382c;--ne:#ff6a52;--amber:#ff9a5c;--green:#ff7a66;--red:#ff5246;--grid:#2a100d;--btn:#2a0d0a;--btnEdge:#5a1c16;--btnHov:#3a1512;--btnPri:#4a1410;--btnPriEdge:#8a2a20;--btnPriInk:#ffb3a6;--inbg:#120504;--glow:#2a0d0a}
+  body.night img,body.night image{filter:saturate(0.4) sepia(0.6) hue-rotate(-25deg) brightness(0.7)}
+  body.theme-amber{--bg:#0a0700;--panel:#16100a;--panel2:#0e0a04;--edge:#3a2c12;--ink:#ffce6a;--dim:#c79a3e;--faint:#7d6326;--ne:#ffb02e;--amber:#ffcf5a;--green:#9fd84a;--red:#ff6a3c;--grid:#241a08;--btn:#241a08;--btnEdge:#5a4218;--btnHov:#32260c;--btnPri:#3a2c0a;--btnPriEdge:#8a6a1e;--btnPriInk:#ffe6a6;--inbg:#0a0700;--glow:#241a08}
+  body.theme-arctic{--bg:#1a2734;--panel:#25364a;--panel2:#1e2c3c;--edge:#41576e;--ink:#eaf3fb;--dim:#9db3c6;--faint:#728aa0;--ne:#5cc8f0;--amber:#f0c059;--green:#4fd0a6;--red:#f0726e;--grid:#2e4256;--btn:#2b3e52;--btnEdge:#465d76;--btnHov:#344a61;--btnPri:#1d4a55;--btnPriEdge:#3aa6c0;--btnPriInk:#d8f3fb;--inbg:#18242f;--glow:#294056}
+  body.theme-hc{--bg:#000000;--panel:#0a0a0a;--panel2:#050505;--edge:#444c54;--ink:#ffffff;--dim:#c8d2dc;--faint:#9aa4ae;--ne:#34e0cf;--amber:#ffc20a;--green:#22e06a;--red:#ff3b30;--grid:#2a2f35;--btn:#1a1a1a;--btnEdge:#5a6068;--btnHov:#262626;--btnPri:#0a3a2c;--btnPriEdge:#22e06a;--btnPriInk:#d6ffe6;--inbg:#000000;--glow:#101418}
+  body.theme-marble{--bg:#ece4d2;--panel:#f6f0e2;--panel2:#e8e0cd;--edge:#cabb9d;--ink:#2b2316;--dim:#6b5c42;--faint:#9a8b6e;--ne:#1f5c9c;--amber:#b07d12;--green:#3a7d4a;--red:#a8392b;--grid:#ddd2bb;--btn:#ece2cc;--btnEdge:#c2a96f;--btnHov:#e3d7bb;--btnPri:#1f5c9c;--btnPriEdge:#16456f;--btnPriInk:#f4efe2;--inbg:#f7f2e6;--glow:#e8dcc0;--nowln:#3a2e1c;--afdConv:#a8392b}
+  .brief-tldr{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+  .brief-verdict{font-family:var(--disp);font-size:30px;font-weight:700;letter-spacing:.04em;padding:3px 16px;border-radius:8px;border:1.5px solid}
+  .vtile .vt-sum .rsn{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+  .vtile .vt-sum .brief-tldr>div>.rsn:not(:first-of-type){display:none}
+  .rsn{display:inline-block;font-size:12px;padding:3px 9px;border-radius:6px;margin:2px 5px 2px 0;border:1px solid}
+  .rsn.bad{color:#ff7a6b;border-color:#ff7a6b55;background:#ff7a6b14}
+  .rsn.warn{color:var(--amber);border-color:#ffb86b55;background:#ffb86b12}
+  .rsn.ok{color:var(--green);border-color:#7ad97a44;background:#7ad97a12}
+  .brief-data{border-top:1px solid var(--edge);padding-top:6px;margin-top:4px}
+  .brief-data div{font-size:12px;color:var(--dim)} .brief-data b{color:var(--ink)}
+  .hide{display:none}
+  #staleBanner{display:none}
+  #staleBanner.show{display:flex}
+  .panel.coll>h2{cursor:pointer;user-select:none}
+  .panel.coll>h2 .caret{display:inline-block;width:1em;color:var(--faint);font-size:.82em}
+  .srcl{font-family:var(--mono);font-size:9px;font-weight:400;color:var(--faint);text-decoration:none;border:1px solid var(--faint);border-radius:5px;padding:1px 6px;opacity:.62;white-space:nowrap;text-transform:none;letter-spacing:normal;flex:0 0 auto}
+  .srcl:hover{opacity:1;border-color:var(--ne);color:var(--ne)}
+  .sect-sum{display:none;margin:6px 0 0;font-size:12.5px;color:var(--faint);line-height:1.6}
+  .panel.collapsed>.sect-sum{display:block}
+  .panel.collapsed>.sect-body{display:none}
+  .sect-keep{display:block;margin-top:10px}
+  .sectmgr{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+  .sectmgr li{display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--panel2);border:1px solid var(--edge);border-radius:8px;font-size:12.5px}
+  .sectmgr li.dragging{opacity:.45}
+  .sectmgr li.over{border-color:var(--ne);box-shadow:0 0 0 1px var(--ne)}
+  .sectmgr .grip{cursor:grab;color:var(--faint);user-select:none}
+  .sectmgr .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sectmgr .mv{padding:0 7px}
+  .sectmgr .tg{padding:1px 8px;font-size:11px;min-width:84px;text-align:center}
+  svg{display:block}
+  .splitcol{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.splitcol{grid-template-columns:1fr}}
+  .sun{display:flex;gap:20px;flex-wrap:wrap;align-items:baseline}
+  .sun b{font-family:var(--disp);font-size:18px;color:var(--ink)}
+  .sun-quad{display:flex;gap:6px;margin-top:2px}
+  .sun-quad .sq{flex:1 1 0;text-align:center;min-width:0}
+  .sun-quad .sq-l{display:block;font-size:9.5px;letter-spacing:.04em;color:var(--faint);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sun-quad .sq-v{display:block;font-family:var(--disp);font-size:16px;color:var(--ink);margin-top:1px}
+  footer{color:var(--faint);font-size:10.5px;letter-spacing:.08em;text-align:center;margin-top:18px;padding-top:12px;border-top:1px solid var(--edge)}
+  .modebar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 16px;padding:10px 12px;background:var(--panel);border:1px solid var(--edge);border-radius:10px}
+  .modebar .modetag{font-size:10px;color:var(--faint);font-family:var(--disp);letter-spacing:.08em}
+  .modebar select{font-family:var(--disp);letter-spacing:.03em}
+  .modebar .spacer{flex:1}
+  .drawer.collapsed{display:none}
+  .cfi ul{margin:6px 0 0;padding-left:16px} .cfi li{margin:3px 0}
+  .cfi ul ul{margin:2px 0 2px} .cfi ul ul li{margin:1.5px 0;color:var(--faint)}
+  body:not(.m-balloon) .balloon-only:not(.panel){display:none}
+  body.m-balloon .airplane-only{display:none}
+  body.m-airplane .no-airplane:not(.panel){display:none}
+  body.m-balloon .air-only:not(.panel){display:none}
+  body.focus > .panel:not(.core-panel){display:none}
+  #emergPanel{display:none}
+  body.emergency #sections > .panel:not(.emerg-show){display:none}
+  body.emergency #settings{display:none}
+  body.emergency #emergPanel{display:block}
+  .topbar{position:sticky;top:0;z-index:60;display:flex;flex-direction:column;gap:4px;background:var(--bg);border-bottom:1px solid var(--edge);padding:6px 0;margin:0 0 8px}
+  .topbar .tb-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .topbar .tb-refresh{padding:5px 12px}
+  .topbar label{margin:0;white-space:nowrap;display:flex;align-items:center;gap:6px}
+  .topbar .tb-id{width:128px}
+  .tb-clock{font-family:ui-monospace,monospace;font-size:13px;color:var(--ne);letter-spacing:.04em;white-space:nowrap;font-weight:600}
+  @media (orientation:landscape){
+    .topbar{flex-direction:row;flex-wrap:wrap;align-items:center;column-gap:18px;row-gap:6px;padding:5px 0}
+    .topbar .tb-row{flex:0 0 auto}
+    .topbar .modebar{margin:0 !important}
+  }
+  body.tx-l :is(.tiny,ul.cap,ul.cap li,.cfi,.cfi li,.tip,label,.brief-data,.card .tiny,.sun){font-size:13.5px}
+  body.tx-xl :is(.tiny,ul.cap,ul.cap li,.cfi,.cfi li,.tip,label,.brief-data,.card .tiny,.sun){font-size:15.5px;line-height:1.55}
+  body.readable :is(.tiny,ul.cap,ul.cap li,.cfi,.cfi li,.tip,label,.brief-data,h2,p,.sun){font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;letter-spacing:.01em;line-height:1.6}
+  body.reduce-motion *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition:none!important}
+  @media (prefers-reduced-motion: reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+  .a11y-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}
+  .a11y-row .lab{font-size:10px;color:var(--faint);font-family:var(--disp);letter-spacing:.08em;min-width:74px}
+  #visualGrid{display:none}
+  body.view-visual #sections{display:none}
+  body.view-visual #visualGrid{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin-top:4px}
+  .vtile{box-sizing:border-box;border:1px solid var(--edge);border-radius:10px;background:var(--panel);padding:10px 12px;cursor:pointer;overflow:hidden;transition:border-color .12s}
+  .vtile:hover{border-color:var(--faint)}
+  .vtile-full{flex:1 1 100%}
+  .vtile-half{flex:1 1 calc(50% - 5px);min-width:280px}
+  .vtile-third{flex:1 1 calc(33.333% - 7px);min-width:230px}
+  .vtile h3{margin:0 0 4px;font-size:11.5px;font-family:var(--disp);letter-spacing:.06em;color:var(--dim);text-transform:uppercase}
+  .vtile .vt-sum{font-size:12px;margin-bottom:6px;line-height:1.4}
+  .vtile .vt-graphic{max-height:300px;overflow:hidden}
+  .vtile .vt-graphic svg{max-width:100%;max-height:300px;height:auto;display:block}
+  .vtile .vt-more{font-size:10px;color:var(--faint);margin-top:6px;font-family:var(--mono)}
+  #vModal{display:none;position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);overflow:auto;padding:22px 10px}
+  #vModal.open{display:block}
+  #vModal .vmodal-inner{max-width:760px;margin:0 auto;background:var(--bg);border:1px solid var(--edge);border-radius:12px}
+  #vModal .vmodal-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--edge);position:sticky;top:0;background:var(--bg);border-radius:12px 12px 0 0}
+  #vModal .vmodal-title{font-family:var(--disp);font-size:14px}
+  #vModal .vmodal-body{padding:12px 14px}
+  #vModal .panel.in-modal{margin:0;border:0;padding:0;background:transparent}
+  #vModal .panel.in-modal>h2{display:none}
+  #vModal .panel.in-modal>.sect-sum{display:block;margin-bottom:8px}
+  #vModal .panel.in-modal>.sect-body{display:block}
+  #vModal #vmClose{background:none;border:1px solid var(--faint);color:var(--ink);border-radius:6px;width:30px;height:30px;cursor:pointer;flex:0 0 auto;font-size:15px}
+</style>
+<style>
+  body{padding:12px 14px 40px} .wrap{max-width:980px;margin:0 auto} h1{font-family:var(--disp);font-size:18px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);margin:6px 0 2px}
+  .panel{margin:12px 0} .panel>h2{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  #dbBox table{font-size:12px} .stamp{font-family:var(--mono);font-size:10px;color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Zephyr Debrief</h1>
+  <div class="tiny muted" style="margin-bottom:10px">Post-flight: your logged track against the forecast winds, layer by layer · what-ifs · a calibration ledger of your own forecast bias. Companion to <a href="zephyr-weather-eyeball.html">Zephyr Weather Eyeball</a>. Not an official source.</div>
+  <div class="panel">
+    <h2>Setup</h2>
+    <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div><label>Model</label><select id="model"><option value="">Auto (best match)</option><option value="gfs_hrrr">HRRR (US 3 km)</option><option value="ncep_nbm_conus">NBM</option><option value="gfs_seamless">GFS</option><option value="ecmwf_ifs025">ECMWF IFS</option><option value="icon_seamless">ICON</option></select></div>
+      <div><label>Forecast run</label><select id="dbRun0"><option value="0">latest for the day</option><option value="1">1 day earlier (pre-flight)</option><option value="2">2 days earlier</option></select></div>
+      <div><label>Import track</label><input type="file" id="dbFile" accept=".kml,.gpx,.xml,application/vnd.google-earth.kml+xml,application/gpx+xml" style="width:auto"></div>
+      <button type="button" id="dbKeep">Keep for calibration</button><button type="button" id="dbClear">Clear</button><span id="dbStatus" class="tiny muted"></span>
+    </div>
+    <div class="tiny muted" style="margin-top:6px">KML with a timed <code>gx:Track</code> (e.g. SkyBound, Google Earth) or GPX with <code>&lt;time&gt;</code>. Altitude drop-outs (stuck values, 1–4 s glitches) are repaired automatically. Nothing is uploaded; "Keep" stores a compact per-layer bias row in this browser only.</div>
+  </div>
+  <div class="panel"><h2>Calibration ledger</h2><div id="dbLedger"></div></div>
+  <div class="panel"><h2>Track vs forecast</h2><div class="sect-sum" id="sum-debrief"></div><div id="dbBox"><div class="muted">Import a track to begin.</div></div></div>
+  <div class="panel"><h2>Map</h2><div id="dbMap"><div class="muted">Loads with the track.</div></div></div>
+  <div class="stamp" style="text-align:center;margin-top:18px">ZEPHYR-DEBRIEF-2026.10.31-d001 · SHIPPED 2026-10-31T16:42:26Z · data: Open-Meteo, Esri World Topo · not a briefing — check 1800WXBRIEF</div>
+</div>
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const LEDGER_KEY="zc_ledger";
+const LV=[1000,975,950,925,900,850,800,750,700];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function zParse(t){ if(t instanceof Date)return t; var x=String(t).trim();
+  if(/[zZ]$/.test(x)||/[+-]\d\d:?\d\d$/.test(x))return new Date(x);
+  if(/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(x))return new Date(x+":00Z");
+  if(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$/.test(x))return new Date(x+"Z");
+  return new Date(x); }
+function fetchT(url,ms,init){ const c=new AbortController(), to=setTimeout(()=>c.abort(),ms||15000); return fetch(url,Object.assign({},init||{},{signal:c.signal})).finally(()=>clearTimeout(to)); }
+const _fjMemo=new Map(); // b333: identical URLs requested within 15 s share one response (kills the duplicate /points, /alerts, Open-Meteo pulls in a fetch burst)
+async function fetchJSON(url,opts){
+  opts=opts||{};
+  if(!opts.noMemo){ const m=_fjMemo.get(url); if(m&&Date.now()-m.t<15000)return m.p; const p=fetchJSONRaw(url,opts); _fjMemo.set(url,{t:Date.now(),p}); p.catch(()=>_fjMemo.delete(url)); if(_fjMemo.size>80){const k=_fjMemo.keys().next().value; _fjMemo.delete(k);} return p; }
+  return fetchJSONRaw(url,opts);
+}
+async function fetchJSONRaw(url,opts){
+  opts=opts||{}; const tries=opts.tries||3, timeoutMs=opts.timeoutMs||13000, onRetry=opts.onRetry; let lastErr;
+  for(let attempt=1;attempt<=tries;attempt++){
+    const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),timeoutMs); let retryable=true, extraWait=0;
+    try{
+      const r=await fetch(url,{signal:ctrl.signal}); clearTimeout(to);
+      if(r.ok)return await r.json();
+      lastErr=new Error("HTTP "+r.status); retryable=(r.status>=500&&r.status<=599)||r.status===429;
+      if(r.status===429){ const ra=parseFloat(r.headers&&r.headers.get?r.headers.get("Retry-After"):""); extraWait=(isFinite(ra)&&ra>0)?Math.min(ra*1000,8000):2500; } // b332: rate-limited -> back off
+    }catch(e){ clearTimeout(to); lastErr=(e&&e.name==="AbortError")?new Error("timeout"):(e||new Error("network error")); retryable=true; }
+    if(retryable&&attempt<tries){ if(onRetry)onRetry(attempt,tries,lastErr.message); await sleep(700*Math.pow(2,attempt-1)+extraWait); }
+    else throw lastErr;
+  }
+  throw lastErr;
+}
+function hourIdxFor(T,when){
+  if(!T||!T.length)return {idx:-1,exact:false,offMin:0};
+  let i=T.indexOf(when); if(i<0)i=T.indexOf(when+":00"); if(i>=0)return {idx:i,exact:true,offMin:0};
+  const tgt=zParse(when); if(!tgt||isNaN(tgt.getTime()))return {idx:-1,exact:false,offMin:0};
+  let bi=-1,bd=Infinity; for(let k=0;k<T.length;k++){const d=Math.abs(zParse(T[k]).getTime()-tgt.getTime()); if(d<bd){bd=d;bi=k;}}
+  return {idx:bi,exact:bd===0,offMin:Math.round(bd/60000)};
+}
+function afdEsc(x){return String(x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function uvAtAgl(arr,alt){
+  if(!arr||!arr.length)return{u:0,v:0};
+  if(alt<=arr[0].agl)return {u:arr[0].u,v:arr[0].v};
+  for(let i=0;i<arr.length-1;i++)if(alt>=arr[i].agl&&alt<=arr[i+1].agl){const f=(alt-arr[i].agl)/(arr[i+1].agl-arr[i].agl);return{u:arr[i].u+f*(arr[i+1].u-arr[i].u),v:arr[i].v+f*(arr[i+1].v-arr[i].v)};}
+  return {u:arr[arr.length-1].u,v:arr[arr.length-1].v};
+}
+function lon2t(lon,z){return (lon+180)/360*Math.pow(2,z);}
+function lat2t(lat,z){const r=lat*Math.PI/180;return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z);}
+function t2lon(x,z){return x/Math.pow(2,z)*360-180;}
+function t2lat(y,z){const n=Math.PI-2*Math.PI*y/Math.pow(2,z);return 180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n)));}
+let debrief=null;
+
+let dbZoomAdj=0;
+function dbMapRender(){ const host=$("#dbMap"); if(!host)return; const D=debrief; if(!D||!D.pts||D.pts.length<2){host.innerHTML="";return;}
+  const P=D.pts; let mnLa=Infinity,mxLa=-Infinity,mnLo=Infinity,mxLo=-Infinity; const all=P.concat(D.fpath||[],(D.whatif&&D.whatif.ext)||[],(D.whatif&&D.whatif.path)||[]);
+  all.forEach(q=>{mnLa=Math.min(mnLa,q.lat);mxLa=Math.max(mxLa,q.lat);mnLo=Math.min(mnLo,q.lon);mxLo=Math.max(mxLo,q.lon);});
+  const cLa=(mnLa+mxLa)/2,cLo=(mnLo+mxLo)/2; let z=15; for(;z>=6;z--){ const fx=Math.abs(lon2t(mxLo,z)-lon2t(mnLo,z)), fy=Math.abs(lat2t(mnLa,z)-lat2t(mxLa,z)); if(Math.max(fx,fy)<=2.2)break; } z=Math.max(6,Math.min(16,z+dbZoomAdj));
+  const fcx=lon2t(cLo,z),fcy=lat2t(cLa,z),x0=Math.floor(fcx)-2,y0=Math.floor(fcy)-2, PX=lon=>(lon2t(lon,z)-x0)*256, PY=lat=>(lat2t(lat,z)-y0)*256;
+  const xs=all.map(q=>PX(q.lon)),ys=all.map(q=>PY(q.lat)); const span=Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys),60), half=span/2*1.18+16, vcx=(Math.max(...xs)+Math.min(...xs))/2, vcy=(Math.max(...ys)+Math.min(...ys))/2, vbX=vcx-half,vbY=vcy-half,vbW=2*half;
+  let tiles=""; const dxF=Math.floor(vbX/256),dxT=Math.floor((vbX+vbW)/256),dyF=Math.floor(vbY/256),dyT=Math.floor((vbY+vbW)/256),wt=Math.pow(2,z);
+  if((dxT-dxF)<=9&&(dyT-dyF)<=9)for(let dx=dxF;dx<=dxT;dx++)for(let dy=dyF;dy<=dyT;dy++){const X=x0+dx,Y=y0+dy; if(X<0||Y<0||X>=wt||Y>=wt)continue; tiles+=`<image x="${dx*256}" y="${dy*256}" width="257" height="257" href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/${z}/${Y}/${X}"/>`;}
+  const sw=(vbW*0.007).toFixed(2), poly=(pts,col,dash,w)=>pts.length>1?`<polyline points="${pts.map(q=>PX(q.lon).toFixed(1)+","+PY(q.lat).toFixed(1)).join(" ")}" fill="none" stroke="${col}" stroke-width="${w||sw}" ${dash?`stroke-dasharray="${dash}"`:""} stroke-linejoin="round"/>`:"";
+  const A=P.filter((q,i)=>i%3===0||i===P.length-1); let g=poly(A,"#fff",null,(sw*2.2).toFixed(2))+poly(A,"#19c8e6");
+  if(D.fpath)g+=poly(D.fpath,"#ffb347",`${(vbW*0.012).toFixed(1)} ${(vbW*0.008).toFixed(1)}`);
+  const W=D.whatif; if(W){ if(W.off&&W.path)g+=poly(W.path,"#c792ea","2 3")+`<circle cx="${PX(W.landOff.lon).toFixed(1)}" cy="${PY(W.landOff.lat).toFixed(1)}" r="${(vbW*0.012).toFixed(1)}" fill="#c792ea" stroke="#000"/>`; if(W.extra&&W.ext)g+=poly(W.ext,"#c792ea","2 3")+`<circle cx="${PX(W.ext[W.ext.length-1].lon).toFixed(1)}" cy="${PY(W.ext[W.ext.length-1].lat).toFixed(1)}" r="${(vbW*0.012).toFixed(1)}" fill="#c792ea" stroke="#000"/>`; }
+  const L0=P[D.i0],LN=P[P.length-1], mk=(q,col,lab)=>`<circle cx="${PX(q.lon).toFixed(1)}" cy="${PY(q.lat).toFixed(1)}" r="${(vbW*0.013).toFixed(1)}" fill="${col}" stroke="#000" stroke-width="1"/><text x="${(PX(q.lon)+vbW*0.02).toFixed(1)}" y="${(PY(q.lat)+vbW*0.01).toFixed(1)}" font-size="${(vbW*0.03).toFixed(1)}" fill="#fff" stroke="#000" stroke-width="0.6" paint-order="stroke">${lab}</text>`;
+  g+=mk(L0,"#46c46a","lift-off")+mk(LN,"#19c8e6","landed"); if(D.fpath&&D.fpath.length>1)g+=mk(D.fpath[D.fpath.length-1],"#ffb347","forecast");
+  const mpp=156543.03*Math.cos(cLa*Math.PI/180)/Math.pow(2,z), pxNm=1852/mpp, nice=[0.5,1,2,5,10,20].find(v=>v*pxNm>=vbW*0.18)||20, bx=vbX+vbW*0.04, by=vbY+vbW*0.95;
+  g+=`<line x1="${bx.toFixed(1)}" y1="${by.toFixed(1)}" x2="${(bx+nice*pxNm).toFixed(1)}" y2="${by.toFixed(1)}" stroke="#fff" stroke-width="${(vbW*0.006).toFixed(2)}"/><text x="${bx.toFixed(1)}" y="${(by-vbW*0.012).toFixed(1)}" font-size="${(vbW*0.03).toFixed(1)}" fill="#fff" stroke="#000" stroke-width="0.6" paint-order="stroke">${nice} NM</text>`;
+  host.innerHTML=`<svg viewBox="${vbX.toFixed(1)} ${vbY.toFixed(1)} ${vbW.toFixed(1)} ${vbW.toFixed(1)}" width="100%" style="background:#0a0e14;border-radius:8px;display:block;max-width:640px;margin:0 auto" role="img" aria-label="Flight track on a topographic base">${tiles}${g}</svg><div class="tiny muted" style="margin-top:4px">Esri World Topo base · cyan = actual · orange dashed = forecast path · purple = what-if · zoom <button type="button" id="dbZi">+</button> <button type="button" id="dbZo">−</button></div>`;
+  const zi=$("#dbZi"),zo=$("#dbZo"); if(zi)zi.onclick=()=>{dbZoomAdj=Math.min(4,dbZoomAdj+1);dbMapRender();}; if(zo)zo.onclick=()=>{dbZoomAdj=Math.max(-4,dbZoomAdj-1);dbMapRender();};
+}
+function setSum(sel,html){ const e=$(sel); if(e)e.innerHTML=html||""; }
+
+function dbParseTrack(text){
+  const pts=[]; const isGpx=/<gpx[\s>]/i.test(text);
+  if(isGpx){ const re=/<trkpt\s+lat="([-\d.]+)"\s+lon="([-\d.]+)"[^>]*>([\s\S]*?)<\/trkpt>/g; let m;
+    while((m=re.exec(text))){ const ele=/<ele>([-\d.]+)<\/ele>/.exec(m[3]), tm=/<time>([^<]+)<\/time>/.exec(m[3]); pts.push({t:tm?Date.parse(tm[1]):NaN,lat:+m[1],lon:+m[2],altM:ele?+ele[1]:NaN}); } }
+  else { const whens=[...text.matchAll(/<when>([^<]+)<\/when>/g)].map(x=>x[1]), coords=[...text.matchAll(/<gx:coord>([^<]+)<\/gx:coord>/g)].map(x=>x[1]);
+    if(coords.length){ for(let i=0;i<coords.length;i++){ const c=coords[i].trim().split(/\s+/); pts.push({t:whens[i]?Date.parse(whens[i]):NaN,lat:+c[1],lon:+c[0],altM:c.length>2?+c[2]:NaN}); } }
+    else { const m=/<coordinates>([\s\S]*?)<\/coordinates>/.exec(text); if(m)m[1].trim().split(/\s+/).forEach(tok=>{const c=tok.split(","); if(c.length>=2)pts.push({t:NaN,lat:+c[1],lon:+c[0],altM:c.length>2?+c[2]:NaN});}); } }
+  return pts.filter(q=>isFinite(q.lat)&&isFinite(q.lon));
+}
+function dbRepairAlt(pts){ // returns {fixed:[m], runs:[[i,j]]}
+  const N=pts.length, alt=pts.map(q=>q.altM), bad=new Array(N).fill(false); let i=0;
+  while(i<N){ let j=i; while(j+1<N&&Math.abs(alt[j+1]-alt[i])<0.5)j++; if(j-i+1>=5){ const ref=i>0?alt[i-1]:(j+1<N?alt[j+1]:null); if(ref!=null&&Math.abs(alt[i]-ref)>100)for(let k=i;k<=j;k++)bad[k]=true; } i=j+1; }
+  i=1; while(i<N-1){ if(!bad[i]){ let j=i; while(j+1<N-1&&Math.abs(alt[j+1]-alt[i])<0.5&&j-i<3)j++; if(Math.abs(alt[i]-alt[i-1])>100&&Math.abs(alt[j]-alt[j+1])>100&&Math.abs(alt[j+1]-alt[i-1])<60)for(let k=i;k<=j;k++)bad[k]=true; i=j+1; } else i++; }
+  for(let r=0;r<3;r++)for(let k=1;k<N-1;k++){ if(bad[k]&&!bad[k-1]&&k-2>=0&&Math.abs(alt[k-1]-alt[k-2])>100)bad[k-1]=true; if(bad[k]&&!bad[k+1]&&k+2<N&&Math.abs(alt[k+1]-alt[k+2])>100)bad[k+1]=true; }
+  const fixed=alt.slice(), runs=[]; i=0;
+  while(i<N){ if(bad[i]){ let j=i; while(j+1<N&&bad[j+1])j++; let a=i-1,b=j+1; while(a>=0&&bad[a])a--; while(b<N&&bad[b])b++;
+      if(a>=0&&b<N){ for(let k=i;k<=j;k++){ const f=(pts[k].t-pts[a].t)/((pts[b].t-pts[a].t)||1); fixed[k]=alt[a]+(isFinite(f)?f:(k-a)/(b-a))*(alt[b]-alt[a]); } }
+      runs.push([i,j]); i=j+1; } else i++; }
+  return {fixed,runs};
+}
+function dbHav(la1,lo1,la2,lo2){ const R=3440.065,p=Math.PI/180,dl=(la2-la1)*p,dn=(lo2-lo1)*p,a=Math.sin(dl/2)**2+Math.cos(la1*p)*Math.cos(la2*p)*Math.sin(dn/2)**2; return 2*R*Math.asin(Math.min(1,Math.sqrt(a))); }
+function dbBrg(la1,lo1,la2,lo2){ const p=Math.PI/180,y=Math.sin((lo2-lo1)*p)*Math.cos(la2*p),x=Math.cos(la1*p)*Math.sin(la2*p)-Math.sin(la1*p)*Math.cos(la2*p)*Math.cos((lo2-lo1)*p); return (Math.atan2(y,x)*180/Math.PI+360)%360; }
+function dbPtsAtHour(H,h,elevM){ const pts=[{agl:33,spd:H.wind_speed_10m[h],dir:H.wind_direction_10m[h]}]; if(H.wind_speed_80m&&H.wind_speed_80m[h]!=null)pts.push({agl:262,spd:H.wind_speed_80m[h],dir:H.wind_direction_80m[h]});
+  LV.forEach(l=>{const g=H[`geopotential_height_${l}hPa`]&&H[`geopotential_height_${l}hPa`][h],sp=H[`wind_speed_${l}hPa`]&&H[`wind_speed_${l}hPa`][h],dr=H[`wind_direction_${l}hPa`]&&H[`wind_direction_${l}hPa`][h]; if(g==null||sp==null||dr==null)return; const agl=(g-elevM)*3.28084; if(agl<-50)return; pts.push({agl,spd:sp,dir:dr});});
+  pts.sort((a,b)=>a.agl-b.agl); return pts.filter(q=>q.spd!=null&&q.dir!=null).map(q=>{const r=q.dir*Math.PI/180;return {agl:q.agl,u:-q.spd*Math.sin(r),v:-q.spd*Math.cos(r)};}); }
+function dbWindAt(tMs,agl){ const D=debrief; if(!D||!D.H)return null; const iso=new Date(tMs).toISOString().slice(0,16); const hr=hourIdxFor(D.H.time,iso); if(!hr||hr.idx<0)return null; const h=hr.idx;
+  const p0=dbPtsAtHour(D.H,h,D.elevM), w0=uvAtAgl(p0,agl); const t0=zParse(D.H.time[h]).getTime(), f=Math.max(0,Math.min(1,(tMs-t0)/3600000)); if(h+1<D.H.time.length&&f>0){ const w1=uvAtAgl(dbPtsAtHour(D.H,h+1,D.elevM),agl); return {u:w0.u+f*(w1.u-w0.u),v:w0.v+f*(w1.v-w0.v)}; } return w0; }
+async function dbFetchWinds(lat,lon,dayISO,runBack){ // b357: runBack 0 = latest run; 1/2 = the forecast as it stood 1/2 days earlier (Open-Meteo previous-runs API, *_previous_dayN)
+  const base=["wind_speed_10m","wind_direction_10m","wind_speed_80m","wind_direction_80m"]; LV.forEach(l=>base.push(`wind_speed_${l}hPa`,`wind_direction_${l}hPa`,`geopotential_height_${l}hPa`)); const model=$("#model")?$("#model").value:"";
+  runBack=+runBack||0; const sfx=runBack?`_previous_day${runBack}`:""; const vars=base.map(v=>v+sfx);
+  const host=runBack?"https://previous-runs-api.open-meteo.com/v1/forecast":"https://api.open-meteo.com/v1/forecast";
+  const url=`${host}?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&hourly=${vars.join(",")}&wind_speed_unit=kn&timezone=GMT&start_date=${dayISO}&end_date=${dayISO}${model?"&models="+model:""}`;
+  const d=await fetchJSON(url,{tries:2,timeoutMs:14000}); if(!d||!d.hourly||!d.hourly.time)throw new Error("no hourly profile");
+  const H={time:d.hourly.time}; let missing=0; base.forEach(v=>{ const a=d.hourly[v+sfx]; if(a)H[v]=a; else missing++; });
+  if(!H.wind_speed_10m||!H.wind_direction_10m)throw new Error(runBack?"previous-run profile not available for this model":"no surface wind in profile");
+  return {H,elevM:(d.elevation!=null?d.elevation:null),model:(model||"auto")+(runBack?` · run ${runBack} day${runBack>1?"s":""} earlier`:" · latest run"),missing}; }
+async function dbImport(file){
+  const st=$("#dbStatus"); try{ if(st)st.textContent="Parsing "+file.name+"…"; const text=await file.text(); const raw=dbParseTrack(text); if(raw.length<10)throw new Error("no track points found (KML gx:Track / GPX trkpt)");
+    const hasT=raw.every(q=>isFinite(q.t)), hasA=raw.some(q=>isFinite(q.altM)); if(!hasT)throw new Error("track has no timestamps — a timed track is needed for speed/direction");
+    raw.sort((a,b)=>a.t-b.t); const rep=hasA?dbRepairAlt(raw):{fixed:raw.map(()=>NaN),runs:[]};
+    const pts=raw.map((q,i)=>({t:q.t,lat:q.lat,lon:q.lon,altM:rep.fixed[i],rawAltM:q.altM}));
+    const i0=hasA?Math.max(0,pts.findIndex(q=>(q.altM-pts[0].altM)>30)):0; // lift-off = first fix 30 m above the first fix
+    debrief={name:file.name,pts,runs:rep.runs,i0,hasA,H:null,elevM:null,whatif:null,model:null};
+    if(st)st.textContent="Fetching the model profile for the flight day…";
+    const day=new Date(pts[i0].t).toISOString().slice(0,10);
+    debrief.text=text; debrief.day=day; await dbLoadRun();
+    
+    dbScore(); renderDebrief(); if(st)st.textContent=""; try{ dbMapRender(); }catch(_){}
+  }catch(e){ if(st)st.textContent="Import failed: "+((e&&e.message)||e); }
+}
+async function dbLoadRun(){ // (re)load the forecast profile for the selected run and rescore
+  const D=debrief; if(!D)return; const st=$("#dbStatus"), runBack=+(($("#dbRun0")||{}).value||0), P=D.pts, hasA=D.hasA;
+  if(st)st.textContent="Fetching the model profile for the flight day\u2026"; D.err=null;
+  try{ const w=await dbFetchWinds(P[D.i0].lat,P[D.i0].lon,D.day,runBack); D.H=w.H; D.elevM=(w.elevM!=null)?w.elevM:(hasA?P[0].altM:0); D.model=w.model; D.runBack=runBack; if(w.missing)D.err=`${w.missing} level variable${w.missing>1?"s":""} missing from this run \u2014 layers interpolated across the gap`; }
+  catch(e){ D.H=null; D.err="forecast profile unavailable ("+((e&&e.message)||"fetch failed")+") \u2014 track shown, scoring off"; D.elevM=hasA?P[0].altM:0; }
+  dbScore(); renderDebrief(); if(st)st.textContent=""; try{ dbMapRender(); }catch(_){}
+}
+function ledgerLoad(){ try{ return JSON.parse(localStorage.getItem(LEDGER_KEY)||"[]"); }catch(_){ return []; } }
+function ledgerSave(a){ try{ localStorage.setItem(LEDGER_KEY,JSON.stringify(a)); }catch(_){} }
+function ledgerAddCurrent(){ const D=debrief; if(!D||!D.rows||!D.H)return false; const R=D.rows.filter(r=>isFinite(r.fk)&&isFinite(r.agl)).slice(1,-1); if(!R.length)return false;
+  const L={}; R.forEach(r=>{ const k=Math.floor(Math.max(0,r.agl)/500)*500; (L[k]=L[k]||[]).push(r); });
+  const layers={}; Object.keys(L).forEach(k=>{ const rs=L[k], mv=rs.filter(r=>r.gs>=4); layers[k]={n:rs.length,ds:+(rs.reduce((s,r)=>s+r.serr,0)/rs.length).toFixed(1),dd:mv.length?Math.round(mv.reduce((s,r)=>s+r.derr,0)/mv.length):null}; });
+  const row={id:D.name+"|"+new Date(D.pts[D.i0].t).toISOString().slice(0,16),date:new Date(D.pts[D.i0].t).toISOString().slice(0,16).replace("T"," ")+"Z",site:D.pts[D.i0].lat.toFixed(3)+","+D.pts[D.i0].lon.toFixed(3),model:D.model,runBack:D.runBack||0,min:Math.round((D.pts[D.pts.length-1].t-D.pts[D.i0].t)/60000),landErr:isFinite(D.landErrNm)?+D.landErrNm.toFixed(1):null,layers};
+  const a=ledgerLoad().filter(x=>x.id!==row.id); a.push(row); ledgerSave(a); return true; }
+function ledgerHtml(){ const a=ledgerLoad(); if(!a.length)return '<div class="tiny muted">No flights kept yet. After a debrief, press <b>Keep for calibration</b>; the ledger accumulates your own forecast bias per layer across flights (this device).</div>';
+  const agg={}; a.forEach(f=>Object.entries(f.layers||{}).forEach(([k,v])=>{ const g=(agg[k]=agg[k]||{n:0,ds:0,dd:0,nd:0}); g.n+=v.n; g.ds+=v.ds*v.n; if(v.dd!=null){g.dd+=v.dd*v.n; g.nd+=v.n;} }));
+  let h=`<div class="tiny" style="margin:4px 0"><b>${a.length} flight${a.length===1?"":"s"} kept</b> \u00b7 per-layer bias = actual \u2212 forecast (positive speed = model light; positive direction = you drifted right of the model\u2019s "to")</div><table class="tbl" style="width:100%;font-size:12px"><thead><tr><th>ft AGL</th><th>minutes</th><th>speed bias kt</th><th>dir bias \u00b0</th></tr></thead><tbody>`;
+  Object.keys(agg).map(Number).sort((x,y)=>x-y).forEach(k=>{ const g=agg[k]; h+=`<tr><td>${k}\u2013${k+499}</td><td>${g.n}</td><td>${(g.ds/g.n>=0?"+":"")+(g.ds/g.n).toFixed(1)}</td><td>${g.nd?(g.dd/g.nd>=0?"+":"")+Math.round(g.dd/g.nd):"\u2014"}</td></tr>`; });
+  h+=`</tbody></table><div class="tiny" style="margin-top:4px">${a.slice(-6).reverse().map(f=>`${afdEsc(f.date)} \u00b7 ${f.min} min \u00b7 ${afdEsc(String(f.model))}${f.landErr!=null?" \u00b7 landing \u0394 "+f.landErr+" nm":""}`).join("<br>")}</div>`;
+  return h; }
+function dbScore(){ const D=debrief; if(!D)return; const P=D.pts, N=P.length, elevFt=(D.elevM||0)*3.28084, rows=[]; let i=D.i0;
+  while(i<N-1){ let j=i; while(j<N-1&&P[j+1].t-P[i].t<60000)j++; if(j===i){i++;continue;}
+    const dist=dbHav(P[i].lat,P[i].lon,P[j].lat,P[j].lon), hrs=(P[j].t-P[i].t)/3600000, gs=dist/hrs, trk=dbBrg(P[i].lat,P[i].lon,P[j].lat,P[j].lon);
+    let msl=0,n=0; for(let k=i;k<=j;k++){ if(isFinite(P[k].altM)){msl+=P[k].altM;n++;} } msl=n?msl/n*3.28084:NaN; const agl=isFinite(msl)?msl-elevFt:NaN;
+    const w=(D.H&&isFinite(agl))?dbWindAt((P[i].t+P[j].t)/2,Math.max(0,agl)):null; const fk=w?Math.hypot(w.u,w.v):NaN, fto=w?(Math.atan2(w.u,w.v)*180/Math.PI+360)%360:NaN;
+    rows.push({t:P[i].t,min:Math.round((P[i].t-P[D.i0].t)/60000),msl,agl,gs,trk,fk,fto,derr:isFinite(fto)?((trk-fto+540)%360)-180:NaN,serr:isFinite(fk)?gs-fk:NaN}); i=j+1; }
+  D.rows=rows;
+  // forecast path: integrate forecast wind along the actual altitude profile from lift-off
+  const fp=[{lat:P[D.i0].lat,lon:P[D.i0].lon,altM:P[D.i0].altM}]; let la=P[D.i0].lat, lo=P[D.i0].lon; const cosL=Math.cos(la*Math.PI/180);
+  if(D.H)for(let k=D.i0+1;k<N;k++){ const dtH=(P[k].t-P[k-1].t)/3600000; if(!(dtH>0)||dtH>0.1)continue; const agl=Math.max(0,((P[k].altM+P[k-1].altM)/2)*3.28084-elevFt); const w=dbWindAt(P[k].t,isFinite(agl)?agl:0); if(!w)continue; la+=w.v*dtH/60; lo+=w.u*dtH/(60*cosL); if(k%5===0||k===N-1)fp.push({lat:la,lon:lo,altM:P[k].altM}); }
+  D.fpath=fp; D.landErrNm=fp.length>1?dbHav(P[N-1].lat,P[N-1].lon,fp[fp.length-1].lat,fp[fp.length-1].lon):NaN;
+}
+function dbWhatIf(){ const D=debrief; if(!D||!D.H)return null; const P=D.pts, N=P.length, elevFt=(D.elevM||0)*3.28084;
+  const off=+(($("#dbOff")||{}).value||0), extra=+(($("#dbExtra")||{}).value||0), aglSel=$("#dbAgl")?$("#dbAgl").value:"last";
+  // launch offset: same altitude-vs-time profile, shifted by off minutes, forecast wind at the shifted time
+  let la=P[D.i0].lat, lo=P[D.i0].lon; const cosL=Math.cos(la*Math.PI/180); const path=[{lat:la,lon:lo}];
+  for(let k=D.i0+1;k<N;k++){ const dtH=(P[k].t-P[k-1].t)/3600000; if(!(dtH>0)||dtH>0.1)continue; const agl=Math.max(0,((P[k].altM+P[k-1].altM)/2)*3.28084-elevFt); const w=dbWindAt(P[k].t+off*60000,isFinite(agl)?agl:0); if(!w)continue; la+=w.v*dtH/60; lo+=w.u*dtH/(60*cosL); if(k%10===0)path.push({lat:la,lon:lo}); }
+  const landOff={lat:la,lon:lo};
+  // fly longer: from the ACTUAL landing point (off=0) or the shifted one, at the chosen AGL, for extra minutes
+  let agl; if(aglSel==="last"){ let s=0,n=0; for(let k=Math.max(D.i0,N-600);k<N;k++){ if(isFinite(P[k].altM)){s+=P[k].altM;n++;} } agl=n?Math.max(300,s/n*3.28084-elevFt):500; } else agl=+aglSel;
+  const start=off?landOff:{lat:P[N-1].lat,lon:P[N-1].lon}; let la2=start.lat, lo2=start.lon; const ext=[{lat:la2,lon:lo2}]; const tEnd=P[N-1].t+off*60000;
+  for(let m=1;m<=extra;m++){ const w=dbWindAt(tEnd+m*60000,agl); if(!w)break; la2+=w.v/60/60; lo2+=w.u/60/(60*cosL); if(m%5===0||m===extra)ext.push({lat:la2,lon:lo2}); }
+  const wNow=dbWindAt(tEnd+Math.max(1,extra)*60000,agl)||{u:0,v:0};
+  D.whatif={off,extra,agl,path,landOff,ext,endSpd:Math.hypot(wNow.u,wNow.v),endTo:(Math.atan2(wNow.u,wNow.v)*180/Math.PI+360)%360,
+    offDist:dbHav(P[N-1].lat,P[N-1].lon,landOff.lat,landOff.lon),offBrg:dbBrg(P[N-1].lat,P[N-1].lon,landOff.lat,landOff.lon),
+    extDist:dbHav(start.lat,start.lon,la2,lo2),extBrg:dbBrg(start.lat,start.lon,la2,lo2)};
+  return D.whatif;
+}
+function dbCubeSVG(){ // b358: dedicated 3D view of the debrief — actual track (altitude-coloured) vs forecast path (orange dashed), rotatable
+  const D=debrief; if(!D||!D.pts||D.pts.length<2)return "";
+  const P=D.pts, i0=D.i0, la0=P[i0].lat, lo0=P[i0].lon, cosL=Math.cos(la0*Math.PI/180), elevFt=(D.elevM||0)*3.28084;
+  const toXY=q=>({x:(q.lon-lo0)*60*cosL,y:(q.lat-la0)*60,alt:isFinite(q.altM)?Math.max(0,q.altM*3.28084-elevFt):0});
+  const A=P.slice(i0).filter((q,i,arr)=>i%4===0||i===arr.length-1).map(toXY), F=(D.fpath||[]).map(toXY);
+  const Wf=(D.whatif&&D.whatif.ext&&D.whatif.ext.length>1)?D.whatif.ext.map(q=>Object.assign(toXY(q),{alt:D.whatif.agl||0})):[], Wo=(D.whatif&&D.whatif.off&&D.whatif.path)?D.whatif.path.map(q=>Object.assign(toXY(q),{alt:0})):[];
+  const all=A.concat(F,Wf,Wo); const rMax=Math.max(1,...all.map(q=>Math.hypot(q.x,q.y)))*1.1, maxAlt=Math.max(1000,...A.map(q=>q.alt));
+  const W=600,H=380,cx=W/2,cyBase=290,cyTop=70,Vspan=cyBase-cyTop,depthK=0.34,maxRpx=215,scH=maxRpx/rMax, az=+(($("#dbAz")||{}).value||0), th=az*Math.PI/180, cs=Math.cos(th), sn=Math.sin(th);
+  const yA=alt=>cyBase-(Math.min(alt,maxAlt)/maxAlt)*Vspan, proj=(x,y,alt)=>{const rx=x*cs-y*sn, ry=x*sn+y*cs; return [cx+rx*scH, yA(alt)-ry*scH*depthK];};
+  const ring=(r,alt)=>{let o=[];for(let a=0;a<=360;a+=15){const p=proj(r*Math.sin(a*Math.PI/180),r*Math.cos(a*Math.PI/180),alt);o.push(p[0].toFixed(1)+","+p[1].toFixed(1));}return o.join(" ");};
+  let g=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;margin:4px 0" role="img" aria-label="3D debrief: actual track versus forecast path">`;
+  g+=`<polygon points="${ring(rMax,0)}" fill="#1e2a22" opacity="0.8"/>`;
+  for(let alt=0;alt<=maxAlt;alt+=1000){ g+=`<polyline fill="none" stroke="var(--grid)" stroke-width="${alt?0.6:0.9}" opacity="${alt?0.5:0.8}" points="${ring(rMax,alt)}"/><text x="${cx-maxRpx-8}" y="${(yA(alt)+3).toFixed(1)}" fill="var(--faint)" font-size="9" text-anchor="end">${alt?alt/1000+"k":"SFC"}</text>`; }
+  const step=rMax>8?5:rMax>3?2:1; for(let r=step;r<rMax;r+=step){ g+=`<polyline fill="none" stroke="var(--grid)" stroke-width="0.5" opacity="0.5" points="${ring(r,0)}"/>`; const lp=proj(0,r,0); g+=`<text x="${lp[0].toFixed(1)}" y="${lp[1].toFixed(1)}" fill="var(--faint)" font-size="8" text-anchor="middle">${r} nm</text>`; }
+  [["N",0],["E",90],["S",180],["W",270]].forEach(([lab,deg])=>{ const a=deg*Math.PI/180, pp=proj(Math.sin(a)*rMax,Math.cos(a)*rMax,0); g+=`<text x="${pp[0].toFixed(1)}" y="${(pp[1]+3).toFixed(1)}" fill="var(--dim)" font-size="10" text-anchor="middle">${lab}</text>`; });
+  const line=(pts,alt,color,w,dash,op)=>pts.length>1?`<polyline fill="none" stroke="${color}" stroke-width="${w}" ${dash?`stroke-dasharray="${dash}"`:""} opacity="${op}" points="${pts.map(q=>{const p=proj(q.x,q.y,alt==null?q.alt:alt);return p[0].toFixed(1)+","+p[1].toFixed(1);}).join(" ")}"/>`:"";
+  g+=line(A,0,"#19c8e6",1.2,null,0.45)+line(F,0,"#ffb347",1,"4 3",0.5); // ground shadows
+  for(let i=0;i<A.length;i+=Math.max(1,Math.round(A.length/14))){ const p1=proj(A[i].x,A[i].y,A[i].alt), p0=proj(A[i].x,A[i].y,0); g+=`<line x1="${p0[0].toFixed(1)}" y1="${p0[1].toFixed(1)}" x2="${p1[0].toFixed(1)}" y2="${p1[1].toFixed(1)}" stroke="#8899aa" stroke-width="0.6" opacity="0.6"/>`; }
+  g+=line(Wo,0,"#c792ea",1.6,"2 3",0.9)+line(Wf,null,"#c792ea",2,"2 3",0.95);
+  g+=line(F,null,"#ffb347",2.2,"6 4",0.95);
+  for(let i=1;i<A.length;i++){ const a=A[i-1],b=A[i],f=Math.min(1,((a.alt+b.alt)/2)/maxAlt), p=proj(a.x,a.y,a.alt), q=proj(b.x,b.y,b.alt); g+=`<line x1="${p[0].toFixed(1)}" y1="${p[1].toFixed(1)}" x2="${q[0].toFixed(1)}" y2="${q[1].toFixed(1)}" stroke="hsl(${Math.round(f*120)},85%,50%)" stroke-width="3" stroke-linecap="round"/>`; }
+  const L=proj(0,0,0), E=proj(A[A.length-1].x,A[A.length-1].y,0), Fe=F.length?proj(F[F.length-1].x,F[F.length-1].y,0):null;
+  g+=`<circle cx="${L[0].toFixed(1)}" cy="${L[1].toFixed(1)}" r="4.5" fill="#46c46a" stroke="#000"/><text x="${(L[0]+7).toFixed(1)}" y="${(L[1]+3).toFixed(1)}" fill="#dfe" font-size="9">lift-off</text>`;
+  g+=`<circle cx="${E[0].toFixed(1)}" cy="${E[1].toFixed(1)}" r="4.5" fill="#19c8e6" stroke="#000"/><text x="${(E[0]+7).toFixed(1)}" y="${(E[1]+3).toFixed(1)}" fill="#19c8e6" font-size="9">landed</text>`;
+  if(Fe)g+=`<circle cx="${Fe[0].toFixed(1)}" cy="${Fe[1].toFixed(1)}" r="4" fill="#ffb347" stroke="#000"/><text x="${(Fe[0]+7).toFixed(1)}" y="${(Fe[1]+3).toFixed(1)}" fill="#ffb347" font-size="9">forecast${isFinite(D.landErrNm)?" (Δ "+D.landErrNm.toFixed(1)+" nm)":""}</text>`;
+  g+=`</svg>`; return g; }
+function dbCubeRedraw(){ const h=$("#dbCube"); if(h&&debrief)h.innerHTML=dbCubeSVG(); const l=$("#dbAzLbl"), a=$("#dbAz"); if(l&&a)l.textContent=a.value+"°"; }
+function renderDebrief(){ const host=$("#dbBox"); if(!host)return; const D=debrief; setSum("#sum-debrief","");
+  if(!D){host.innerHTML='<div class="muted">Import a KML (gx:Track) or GPX file from your flight logger. The track stays in this page only.</div>';return;}
+  const P=D.pts,N=P.length, fz=t=>new Date(t).toISOString().slice(11,16)+"Z", elevFt=(D.elevM||0)*3.28084; const maxFt=D.hasA?Math.max(...P.map(q=>q.altM).filter(isFinite))*3.28084:NaN;
+  const crow=dbHav(P[D.i0].lat,P[D.i0].lon,P[N-1].lat,P[N-1].lon), brg=dbBrg(P[D.i0].lat,P[D.i0].lon,P[N-1].lat,P[N-1].lon), dur=(P[N-1].t-P[D.i0].t)/60000;
+  let h=`<div class="tiny" style="margin-bottom:6px"><b>${afdEsc(D.name)}</b> · ${N} fixes · lift-off <b>${fz(P[D.i0].t)}</b> → landed <b>${fz(P[N-1].t)}</b> (${Math.round(dur)} min) · crow <b>${crow.toFixed(1)} nm</b> brg ${String(Math.round(brg)).padStart(3,"0")}°${isFinite(maxFt)?` · max ${Math.round(maxFt).toLocaleString()} ft MSL (${Math.round(maxFt-elevFt).toLocaleString()} AGL)`:""}${D.runs.length?` · <span style="color:var(--amber)">${D.runs.length} altitude drop-out${D.runs.length===1?"":"s"} repaired</span>`:""}</div>`;
+  if(D.err)h+=`<div class="tiny" style="color:var(--amber);margin-bottom:6px">${afdEsc(D.err)}</div>`;
+  const R=(D.rows||[]).filter(r=>isFinite(r.fk)); const COL=e=>Math.abs(e)<=10?"var(--green)":Math.abs(e)<=25?"var(--amber)":"var(--red)";
+  if(R.length){ // per-layer table
+    const L={}; R.slice(1,-1).forEach(r=>{ if(!isFinite(r.agl))return; const k=Math.floor(Math.max(0,r.agl)/500)*500; (L[k]=L[k]||[]).push(r); });
+    const cm=xs=>(Math.atan2(xs.reduce((s,x)=>s+Math.sin(x*Math.PI/180),0),xs.reduce((s,x)=>s+Math.cos(x*Math.PI/180),0))*180/Math.PI+360)%360;
+    h+=`<div class="tblwrap"><table class="tbl" style="width:100%;font-size:12px"><thead><tr><th>ft AGL</th><th>min</th><th>actual gs</th><th>fc kt</th><th>Δ</th><th>actual trk</th><th>fc to</th><th>Δ°</th></tr></thead><tbody>`;
+    Object.keys(L).map(Number).sort((a,b)=>a-b).forEach(k=>{ const rs=L[k], mv=rs.filter(r=>r.gs>=4); const gs=rs.reduce((s,r)=>s+r.gs,0)/rs.length, fk=rs.reduce((s,r)=>s+r.fk,0)/rs.length; const de=mv.length?mv.reduce((s,r)=>s+r.derr,0)/mv.length:NaN;
+      h+=`<tr><td>${k}–${k+499}</td><td>${rs.length}</td><td>${gs.toFixed(1)}</td><td>${fk.toFixed(1)}</td><td style="color:${COL((gs-fk)*3)}">${(gs-fk>=0?"+":"")+(gs-fk).toFixed(1)}</td><td>${mv.length?String(Math.round(cm(mv.map(r=>r.trk)))).padStart(3,"0"):"—"}</td><td>${mv.length?String(Math.round(cm(mv.map(r=>r.fto)))).padStart(3,"0"):"—"}</td><td style="color:${isFinite(de)?COL(de):"var(--faint)"}">${isFinite(de)?(de>=0?"+":"")+Math.round(de):"—"}</td></tr>`; });
+    h+=`</tbody></table></div>`;
+    const mv=R.slice(1,-1).filter(r=>r.gs>=4); const mad=mv.reduce((s,r)=>s+Math.abs(r.derr),0)/(mv.length||1), mse=R.reduce((s,r)=>s+r.serr,0)/R.length, mase=R.reduce((s,r)=>s+Math.abs(r.serr),0)/R.length;
+    h+=`<div class="tiny" style="margin:6px 0">Overall: mean |direction error| <b>${Math.round(mad)}°</b>, mean speed error <b>${(mse>=0?"+":"")+mse.toFixed(1)} kt</b> (|Δ| ${mase.toFixed(1)} kt)${isFinite(D.landErrNm)?` · forecast path lands <b>${D.landErrNm.toFixed(1)} nm</b> from the real landing`:""} · model <b>${afdEsc(String(D.model||""))}</b>, run as selected above \u2014 pick <b>1 day earlier</b> to score against the forecast you planned on.</div>`;
+    // chart: speed + direction per minute
+    const W=620,H=200,pl=36,pr=10,pt=10,pb=22, n=R.length, X=i=>pl+i*(W-pl-pr)/Math.max(1,n-1), smax=Math.max(10,...R.map(r=>Math.max(r.gs,r.fk)))*1.1;
+    const Y1=v=>pt+(H/2-pt-6)*(1-v/smax), un=x=>x<120?x+360:x, Y2=v=>H/2+6+(H/2-pb-6)*(1-(un(v)-180)/240);
+    let g=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;margin:4px 0" aria-label="Actual vs forecast speed and direction per minute">`;
+    g+=`<text x="2" y="${pt+8}" font-size="8" fill="var(--faint)">kt</text><text x="2" y="${H/2+16}" font-size="8" fill="var(--faint)">°T</text>`;
+    [["gs","#4ec9e0",""],["fk","#ffb347","4 3"]].forEach(([k,c,da])=>{ g+=`<polyline fill="none" stroke="${c}" stroke-width="1.6" ${da?`stroke-dasharray="${da}"`:""} points="${R.map((r,i)=>X(i).toFixed(1)+","+Y1(r[k]).toFixed(1)).join(" ")}"/>`; });
+    [["trk","#4ec9e0",""],["fto","#ffb347","4 3"]].forEach(([k,c,da])=>{ g+=`<polyline fill="none" stroke="${c}" stroke-width="1.6" ${da?`stroke-dasharray="${da}"`:""} points="${R.map((r,i)=>X(i).toFixed(1)+","+Y2(r[k]).toFixed(1)).join(" ")}"/>`; });
+    for(let i=0;i<n;i+=10)g+=`<text x="${X(i).toFixed(1)}" y="${H-6}" font-size="8" fill="var(--faint)" text-anchor="middle">${R[i].min}m</text>`;
+    [180,270,360].forEach(v=>g+=`<text x="${pl-3}" y="${(Y2(v)+3).toFixed(1)}" font-size="7" fill="var(--faint)" text-anchor="end">${v%360||360}</text>`);
+    g+=`</svg><div class="tiny muted">solid = actual (GPS) · dashed = forecast at that altitude &amp; minute · top: speed · bottom: track / drift-to (°T)</div>`; h+=g;
+  }
+  // 3D cube (b358) — actual (altitude-coloured, cyan shadow) vs forecast path (orange dashed); rotatable; the 2D charts above stay
+  h+=`<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;border-top:1px solid var(--edge);padding-top:8px"><b class="tiny">3D — actual vs forecast</b><label class="tiny" style="margin:0;white-space:nowrap">rotate <span id="dbAzLbl">${+(($("#dbAz")||{}).value||0)}°</span></label><input id="dbAz" type="range" min="0" max="360" step="5" value="${+(($("#dbAz")||{}).value||0)}" style="flex:1;min-width:120px"></div><div id="dbCube">${dbCubeSVG()}</div><div class="tiny muted">track colour = altitude (red surface → green top) · cyan shadow = actual ground track · orange dashed = forecast path on your altitude profile · purple = what-if legs · rings every 1,000 ft</div>`;
+  // what-if controls
+  h+=`<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;border-top:1px solid var(--edge);padding-top:8px"><b class="tiny">What-if</b>
+    <label class="tiny">launch <select id="dbOff">${[-60,-45,-30,-15,0,15,30,45,60].map(v=>`<option value="${v}"${v===0?" selected":""}>${v>0?"+":""}${v} min</option>`).join("")}</select></label>
+    <label class="tiny">fly <select id="dbExtra">${[0,10,20,30,45,60].map(v=>`<option value="${v}">${v?"+"+v+" min":"no extra"}</option>`).join("")}</select></label>
+    <label class="tiny">at <select id="dbAgl"><option value="last">final altitude band</option><option value="300">300 ft</option><option value="500">500 ft</option><option value="1000">1,000 ft</option><option value="1500">1,500 ft</option><option value="2500">2,500 ft</option></select></label>
+    <button type="button" id="dbRun">Run what-if</button></div><div id="dbWhatIf" class="tiny" style="margin-top:6px"></div>
+    <div class="tiny muted" style="margin-top:8px">Actual track (cyan), forecast path (orange dashed) and what-if legs (purple) are drawn on the map below. Track is held in memory only unless you keep it for calibration.</div>`;
+  host.innerHTML=h; {const az=$("#dbAz"); if(az){ let raf=null; az.addEventListener("input",()=>{ if(raf==null)raf=requestAnimationFrame(()=>{raf=null; dbCubeRedraw();}); }); }}
+  const rb=$("#dbRun"); if(rb)rb.onclick=()=>{ const w=dbWhatIf(); const box=$("#dbWhatIf"); if(!w){ if(box)box.textContent="Forecast profile unavailable."; return; }
+    if(box)box.innerHTML=`${w.off?`Launch <b>${w.off>0?"+":""}${w.off} min</b>: same altitude profile lands <b>${w.offDist.toFixed(1)} nm</b> (brg ${String(Math.round(w.offBrg)).padStart(3,"0")}°) from the real landing. `:""}${w.extra?`Fly <b>+${w.extra} min</b> at ~${Math.round(w.agl)} ft AGL: <b>${w.extDist.toFixed(1)} nm</b> further, bearing ${String(Math.round(w.extBrg)).padStart(3,"0")}°, forecast wind there ${Math.round(w.endSpd)} kt toward ${String(Math.round(w.endTo)).padStart(3,"0")}° — check the Map view for landing options along that leg.`:""}${!w.off&&!w.extra?"Pick an offset or extra minutes.":""}`;
+    dbCubeRedraw(); try{ dbMapRender(); }catch(_){} };
+  const R2=(D.rows||[]).filter(r=>isFinite(r.derr)&&r.gs>=4); const mad=R2.length?R2.reduce((s,r)=>s+Math.abs(r.derr),0)/R2.length:NaN;
+  setSum("#sum-debrief",`<strong>${afdEsc(D.name.replace(/\.(kml|gpx)$/i,""))}</strong> <span class="tiny muted">· ${Math.round(dur)} min · ${crow.toFixed(1)} nm${isFinite(mad)?` · |Δdir| ${Math.round(mad)}°`:""}${isFinite(D.landErrNm)?` · fc landing Δ ${D.landErrNm.toFixed(1)} nm`:""}</span>`);
+}
+{const _df=$("#dbFile"); if(_df)_df.addEventListener("change",()=>{ if(_df.files&&_df.files[0])dbImport(_df.files[0]); }); const _dr=$("#dbRun0"); if(_dr)_dr.addEventListener("change",()=>{ if(debrief)dbLoadRun(); }); const _dm=$("#model"); if(_dm)_dm.addEventListener("change",()=>{ if(debrief)dbLoadRun(); }); const _dk=$("#dbKeep"); if(_dk)_dk.addEventListener("click",()=>{ const ok=ledgerAddCurrent(); const l=$("#dbLedger"); if(l)l.innerHTML=ledgerHtml(); const st=$("#dbStatus"); if(st)st.textContent=ok?"Kept in the calibration ledger (this browser).":"Import and score a flight first."; }); const _dc=$("#dbClear"); if(_dc)_dc.addEventListener("click",()=>{ debrief=null; renderDebrief(); dbMapRender(); }); {const l=$("#dbLedger"); if(l)l.innerHTML=ledgerHtml();} renderDebrief();}
+</script>
+</body>
+</html>

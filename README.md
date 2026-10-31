@@ -2,8 +2,8 @@
 
 Single-file, offline-capable aviation go/no-go weather tool for balloon and light fixed-wing flight planning. Open `zephyr-weather-eyeball.html` in any modern browser — no build step, no backend, no keys. Live data comes from CORS-open public APIs (Open-Meteo forecast/ensemble/archive, api.weather.gov, RainViewer, OurAirports); the paste path keeps it usable offline.
 
-**Current build:** `ZEPHYR-EYEBALL-2026.06.01-b352`
-**README stamped (UTC):** 2026-10-26T02:06:56Z
+**Current build:** `ZEPHYR-EYEBALL-2026.06.01-b359` · Debrief `ZEPHYR-DEBRIEF-2026.10.31-d001`
+**README stamped (UTC):** 2026-10-31T16:42:26Z
 
 ## What it does
 - Hourly winds-aloft profile, transport-wind / gust / shear verdict against editable personal minimums (balloon and airplane sets)
@@ -16,7 +16,10 @@ Single-file, offline-capable aviation go/no-go weather tool for balloon and ligh
 - Live drag-and-drop dashboard reorder; visual-tile mode for phones
 
 ## Layout
-- `zephyr-weather-eyeball.html` — the app (build id and ship timestamp in the header comment and footer)
+- `zephyr-weather-eyeball.html` — the go/no-go app (build id and ship timestamp in the header comment and footer)
+- `zephyr-debrief.html` — **Zephyr Debrief**, the post-flight tool: import a KML/GPX track, altitude repair, actual vs forecast per layer (2D + 3D), what-ifs, calibration ledger. Standalone; usable by any pilot. Live: https://grumby42.github.io/zephyr-weather-eyeball/zephyr-debrief.html
+- `relay/`, `.github/workflows/relay.yml` — server-side relay of aviationweather.gov products to `data/latest.json`
+- `tools/kml_parse.py`, `tools/kml_fix_compare.py`, `tools/metar_columns.py`, `tools/metar_archive_analyze.py` — offline analysis scripts
 - `docs/audit-2026-10-23.md` — full-file audit with per-build fix status
 - `tools/selftest.sh` — syntax/structure check + smoke test + screenshots (run from the repo root)
 - `tools/smoke.js` — headless-Chromium smoke test (Playwright)
