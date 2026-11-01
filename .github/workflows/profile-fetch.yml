@@ -1,0 +1,45 @@
+name: wind profile fetch
+# One-off: pull an Open-Meteo hourly wind profile (10/80/120/180 m + 1000-700 hPa) and 15-minute surface wind for a
+# point/day into data/profiles/, for post-flight reconstruction when the debrief page can't be used (e.g. a dead logger).
+on:
+  workflow_dispatch:
+    inputs:
+      lat:    { description: "latitude",  required: true, default: "40.065" }
+      lon:    { description: "longitude", required: true, default: "-86.085" }
+      date:   { description: "YYYY-MM-DD (UTC)", required: true }
+      models: { description: "comma list of Open-Meteo model ids", required: false, default: "gfs_hrrr,ncep_nbm_conus,gfs_seamless,best_match" }
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: fetch
+        env:
+          LAT: ${{ inputs.lat }}
+          LON: ${{ inputs.lon }}
+          DAY: ${{ inputs.date }}
+          MODELS: ${{ inputs.models }}
+        run: |
+          set -e; mkdir -p data/profiles
+          LV="1000,975,950,925,900,850,800,750,700"
+          H="wind_speed_10m,wind_direction_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m,wind_speed_180m,wind_direction_180m,temperature_2m,cloud_cover,cloud_cover_low,boundary_layer_height"
+          for l in ${LV//,/ }; do H="$H,wind_speed_${l}hPa,wind_direction_${l}hPa,geopotential_height_${l}hPa,temperature_${l}hPa"; done
+          OUT="data/profiles/${DAY}_${LAT}_${LON}.json"
+          echo '{"generated":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","lat":'"$LAT"',"lon":'"$LON"',"date":"'"$DAY"'","models":{}}' > "$OUT"
+          for m in ${MODELS//,/ }; do
+            echo "== $m"
+            curl -sS --max-time 60 "https://api.open-meteo.com/v1/forecast?latitude=$LAT&longitude=$LON&hourly=$H&minutely_15=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kn&timezone=GMT&start_date=$DAY&end_date=$DAY&models=$m" -o /tmp/m.json || echo '{"error":"curl failed"}' > /tmp/m.json
+            jq --arg m "$m" --slurpfile x /tmp/m.json '.models[$m]=$x[0]' "$OUT" > /tmp/o.json && mv /tmp/o.json "$OUT"
+            # the forecast as it stood the day before (previous-runs API), 10 m / 80 m / pressure levels only
+            P=""; for v in wind_speed_10m wind_direction_10m wind_speed_80m wind_direction_80m; do P="$P,${v}_previous_day1"; done
+            for l in ${LV//,/ }; do P="$P,wind_speed_${l}hPa_previous_day1,wind_direction_${l}hPa_previous_day1,geopotential_height_${l}hPa_previous_day1"; done
+            curl -sS --max-time 60 "https://previous-runs-api.open-meteo.com/v1/forecast?latitude=$LAT&longitude=$LON&hourly=${P#,}&wind_speed_unit=kn&timezone=GMT&start_date=$DAY&end_date=$DAY&models=$m" -o /tmp/p.json || echo '{"error":"curl failed"}' > /tmp/p.json
+            jq --arg m "$m" --slurpfile x /tmp/p.json '.models[$m+"_prev1"]=$x[0]' "$OUT" > /tmp/o.json && mv /tmp/o.json "$OUT"
+          done
+          ls -la data/profiles; head -c 400 "$OUT"; echo
+      - name: commit
+        run: |
+          git config user.name "zephyr-relay"; git config user.email "relay@users.noreply.github.com"
+          git add data/profiles && (git commit -m "profile: ${{ inputs.date }} @ ${{ inputs.lat }},${{ inputs.lon }} [skip ci]" && git pull --rebase && git push) || echo "nothing to commit"
