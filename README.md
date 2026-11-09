@@ -2,8 +2,8 @@
 
 Single-file, offline-capable aviation go/no-go weather tool for balloon and light fixed-wing flight planning. Open `zephyr-weather-eyeball.html` in any modern browser — no build step, no backend, no keys. Live data comes from CORS-open public APIs (Open-Meteo forecast/ensemble/archive, api.weather.gov, RainViewer, OurAirports); the paste path keeps it usable offline.
 
-**Current build:** `ZEPHYR-EYEBALL-2026.06.01-b364` · Debrief `ZEPHYR-DEBRIEF-2026.10.31-d002`
-**README stamped (UTC):** 2026-11-07T17:23:18Z
+**Current build:** `ZEPHYR-EYEBALL-2026.06.01-b365` · Debrief `ZEPHYR-DEBRIEF-2026.10.31-d002`
+**README stamped (UTC):** 2026-11-09T10:58:12Z
 
 ## What it does
 - Hourly winds-aloft profile, transport-wind / gust / shear verdict against editable personal minimums (balloon and airplane sets)
